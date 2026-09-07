@@ -24,7 +24,16 @@ app.use((req, res, next) => {
   if (blocked.test(req.path)) return res.status(404).end();
   next();
 });
-app.use(express.static(__dirname, { extensions: ['html'], index: 'index.html' }));
+const PUBLIC_DIR = path.join(__dirname, 'public');
+
+app.use(express.static(PUBLIC_DIR, {
+  extensions: ['html'],
+  index: 'index.html'
+}));
+
+app.get('/', (_req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
+});
 
 const contactLimiter = rateLimit({ windowMs: 10 * 60 * 1000, limit: 12, standardHeaders: true, legacyHeaders: false });
 const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 8, standardHeaders: true, legacyHeaders: false });
