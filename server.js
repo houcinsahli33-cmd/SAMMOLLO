@@ -25,6 +25,31 @@ app.use((req, res, next) => {
   next();
 });
 const PUBLIC_DIR = path.join(__dirname, 'public');
+const ADMIN_PATH = String(process.env.ADMIN_PATH || '')
+  .trim()
+  .replace(/^\/+|\/+$/g, '');
+
+if (!ADMIN_PATH) {
+  console.warn('[Sécurité] ADMIN_PATH non configuré.');
+}
+
+if (ADMIN_PATH) {
+  app.get(`/${ADMIN_PATH}`, (req, res) => {
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+    res.sendFile(path.join(__dirname, 'admin-private.html'));
+  });
+}
+
+app.get([
+  '/admin',
+  '/admin.html',
+  '/administration',
+  '/administrator',
+  '/backoffice',
+  '/back-office'
+], (_req, res) => {
+  res.status(404).send('Not Found');
+});
 
 app.use(express.static(PUBLIC_DIR, {
   extensions: ['html'],
