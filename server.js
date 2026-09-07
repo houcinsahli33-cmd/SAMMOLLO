@@ -73,12 +73,30 @@ function safeEqualHex(a, b) {
 }
 function escapeHtml(s) { return String(s).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
 function mailTransport() {
-  if (!process.env.SMTP_HOST) return null;
+  const host = String(process.env.SMTP_HOST || '').trim();
+  const user = String(process.env.SMTP_USER || '').trim();
+
+  // Les mots de passe d'application Google font 16 caractères.
+  // On retire les espaces et retours à la ligne éventuels.
+  const pass = String(process.env.SMTP_PASS || '').replace(/\s+/g, '');
+
+  const port = Number(String(process.env.SMTP_PORT || '587').trim());
+  const secure =
+    String(process.env.SMTP_SECURE || 'false').trim().toLowerCase() === 'true';
+
+  if (!host || !user || !pass) {
+    return null;
+  }
+
   return nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT || 587),
-    secure: String(process.env.SMTP_SECURE) === 'true',
-    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+    host,
+    port,
+    secure,
+    requireTLS: port === 587,
+    auth: {
+      user,
+      pass
+    }
   });
 }
 function signAdmin(admin) { return jwt.sign({ sub: admin.id, email: admin.email, role: 'admin' }, JWT_SECRET, { expiresIn: '8h' }); }
