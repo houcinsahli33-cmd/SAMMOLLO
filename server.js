@@ -87,6 +87,13 @@ function mailTransport() {
   if (!host || !user || !pass) {
     return null;
   }
+  console.log('SMTP DEBUG:', {
+  host,
+  port,
+  secure,
+  user,
+  passwordLength: pass.length
+});
 
   return nodemailer.createTransport({
     host,
