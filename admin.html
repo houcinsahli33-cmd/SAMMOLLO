@@ -1,0 +1,18 @@
+<!doctype html><html lang="fr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Sammollo | Administration</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="assets/css/admin.css"></head><body>
+<div class="admin-shell">
+  <aside class="admin-side">
+    <div class="admin-brand"><img src="image/logorestaurant.png" alt=""><div><strong>SAMMOLLO</strong><small>ADMINISTRATION</small></div></div>
+    <nav><button class="side-link active" data-view="dashboard">Tableau de bord</button><button class="side-link" data-view="orders">Commandes</button><button class="side-link" data-view="messages">Messages</button><button class="side-link" data-view="menu">Carte & produits</button><button class="side-link" data-view="events">Événements</button></nav>
+    <div class="side-bottom"><a href="index.html">← Voir le site</a><button id="logoutBtn" type="button">Déconnexion</button></div>
+  </aside>
+  <main class="admin-main">
+    <header class="admin-top"><div><p class="kicker">SAMMOLLO BACK-OFFICE</p><h1 id="viewTitle">Tableau de bord</h1></div><div class="admin-user"><span class="status-dot"></span><span id="adminName">Administrateur</span></div></header>
+    <section id="loginPanel" class="login-panel">
+      <div class="login-card"><img src="image/logorestaurant.png" alt="Logo Sammollo"><p class="kicker">ACCÈS PRIVÉ</p><h2>Administration Sammollo</h2><p>Connectez-vous pour gérer les commandes, messages et produits.</p><form id="loginForm"><label>Email<input type="email" name="email" autocomplete="username" required></label><label>Mot de passe<input type="password" name="password" autocomplete="current-password" required></label><button class="admin-btn" type="submit">Se connecter</button><p class="form-message" id="loginStatus"></p></form></div>
+    </section>
+    <section id="appPanel" hidden>
+      <div class="metrics"><article><span>Nouveaux messages</span><strong id="metricMessages">—</strong></article><article><span>Commandes aujourd’hui</span><strong id="metricOrders">—</strong></article><article><span>CA payé aujourd’hui</span><strong id="metricRevenue">—</strong></article><article><span>Produits disponibles</span><strong id="metricItems">—</strong></article></div>
+      <div class="admin-card" id="contentCard"><div class="card-head"><div><p class="kicker">ACTIVITÉ</p><h2>Vue d’ensemble</h2></div><button class="secondary-btn" id="refreshBtn" type="button">Actualiser</button></div><div id="viewContent" class="table-wrap"><p class="empty">Sélectionnez une section dans le menu.</p></div></div>
+    </section>
+  </main>
+</div><script src="assets/js/admin.js"></script></body></html>

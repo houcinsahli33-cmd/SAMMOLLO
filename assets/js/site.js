@@ -1,0 +1,2 @@
+
+(()=>{const btn=document.querySelector('.menu-toggle'),nav=document.querySelector('.main-nav');if(btn&&nav){btn.addEventListener('click',()=>{const open=nav.classList.toggle('open');btn.setAttribute('aria-expanded',String(open))});document.addEventListener('click',e=>{if(!nav.contains(e.target)&&!btn.contains(e.target)&&nav.classList.contains('open')){nav.classList.remove('open');btn.setAttribute('aria-expanded','false')}})}})();

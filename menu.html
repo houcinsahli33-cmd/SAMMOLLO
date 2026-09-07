@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="image/logorestaurant.png">
+  <link rel="shortcut icon" type="image/png" href="image/logorestaurant.png">
+  <link rel="apple-touch-icon" href="image/logorestaurant.png">
+
+  <meta name="description" content="Découvrez la carte du restaurant Sammollo à Draâ El Mizan : pizzas, burgers, plats, pâtes, desserts et boissons.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/site.css">
+  <link rel="stylesheet" href="assets/css/menu-pro.css">
+  <title>Sammollo Restaurant | Menu</title>
+</head>
+<body>
+<header class="site-header">
+  <div class="nav-shell">
+    <a class="brand" href="index.html" aria-label="Sammollo accueil">
+      <img src="image/logorestaurant.png" alt="Logo Sammollo">
+      <span><strong>SAMMOLLO</strong><small>GOOD FOOD · GOOD MOOD</small></span>
+    </a>
+    <button class="menu-toggle" type="button" aria-expanded="false" aria-label="Ouvrir le menu"><span></span><span></span><span></span></button>
+    <nav class="main-nav" aria-label="Navigation principale">
+      <ul>
+        <li><a class="nav-link" href="index.html">Accueil</a></li>
+        <li><a class="nav-link active" href="menu.html">Menu</a></li>
+        <li><a class="nav-link" href="evenements.html">Événements</a></li>
+        <li><a class="nav-link" href="a-propos.html">À propos</a></li>
+        <li><a class="nav-link" href="contact.html">Contact</a></li>
+      </ul>
+      <a class="btn btn-gold nav-order" href="#commander">Commander</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="hero hero-inner hero-menu menu-hero-pro">
+    <div class="hero-overlay"></div>
+    <div class="hero-content centered">
+      <p class="eyebrow">LA CARTE SAMMOLLO</p>
+      <h1>Notre <em>Menu</em></h1>
+      <p>Une carte généreuse, simple à parcourir et préparée à la commande.</p>
+    </div>
+  </section>
+
+  <section class="menu-intro cream menu-intro-pro">
+    <div>
+      <p class="eyebrow dark">À TABLE</p>
+      <h2>Choisissez selon vos envies</h2>
+    </div>
+    <p>Parcourez chaque catégorie avec les flèches latérales. Les prix et disponibilités sont chargés depuis la base de données.</p>
+  </section>
+
+  <section class="menu-page cream" id="menuCatalog">
+    <div class="menu-loading">Chargement du menu…</div>
+  </section>
+
+  <section id="commander" class="cta-band menu-cta-pro">
+    <div>
+      <p class="eyebrow">VOTRE COMMANDE</p>
+      <h2>Prêt à commander ?</h2>
+      <p>Ajoutez vos plats au panier. Le total final est toujours recalculé côté serveur.</p>
+    </div>
+    <button class="btn btn-gold" type="button" id="openCart">Voir mon panier <span id="cartCount">0</span></button>
+  </section>
+</main>
+
+<footer class="site-footer footer-pro">
+  <div class="footer-main">
+    <div class="footer-brand">
+      <a class="brand brand-footer" href="index.html">
+        <img src="image/logorestaurant.png" alt="Logo Sammollo">
+        <span>
+          <strong>SAMMOLLO</strong>
+          <small>GOOD FOOD · GOOD MOOD</small>
+        </span>
+      </a>
+    </div>
+
+    <nav class="footer-nav" aria-label="Navigation pied de page">
+      <a href="index.html">Accueil</a>
+      <a href="menu.html">Menu</a>
+      <a href="evenements.html">Événements</a>
+      <a href="a-propos.html">À propos</a>
+      <a href="contact.html">Contact</a>
+    </nav>
+
+    <div class="footer-social" aria-label="Réseaux sociaux">
+      <a href="https://www.facebook.com/sam.mollo.58"
+         target="_blank"
+         rel="noopener"
+         aria-label="Facebook"
+         title="Facebook">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M13.7 22v-9h3l.5-3.5h-3.5V7.3c0-1 .3-1.7 1.8-1.7h1.9V2.5c-.3 0-1.5-.1-2.8-.1-2.8 0-4.7 1.7-4.7 4.8v2.3H7V13h2.9v9h3.8z"/>
+        </svg>
+      </a>
+
+      <a href="https://www.instagram.com/sammollodraael/"
+         target="_blank"
+         rel="noopener"
+         aria-label="Instagram"
+         title="Instagram">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M7.5 2h9A5.5 5.5 0 0 1 22 7.5v9a5.5 5.5 0 0 1-5.5 5.5h-9A5.5 5.5 0 0 1 2 16.5v-9A5.5 5.5 0 0 1 7.5 2zm0 2A3.5 3.5 0 0 0 4 7.5v9A3.5 3.5 0 0 0 7.5 20h9a3.5 3.5 0 0 0 3.5-3.5v-9A3.5 3.5 0 0 0 16.5 4h-9zM12 7a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6zm5.3-3.2a1.2 1.2 0 1 1 0 2.4 1.2 1.2 0 0 1 0-2.4z"/>
+        </svg>
+      </a>
+
+      <a href="#"
+         class="social-disabled"
+         aria-label="TikTok"
+         title="Ajoutez ici le lien TikTok officiel de Sammollo">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M15.7 2h-3.2v13.1a2.9 2.9 0 1 1-2.5-2.9V9a6.1 6.1 0 1 0 5.7 6.1V8.4a8.2 8.2 0 0 0 4.8 1.5V6.7c-2.4-.2-4.3-2.1-4.8-4.7z"/>
+        </svg>
+      </a>
+    </div>
+  </div>
+
+  <div class="footer-contact footer-contact-pro">
+    <span>Contacts : <a href="tel:+213668929453">0668929453</a></span>
+    <a href="mailto:SammolloDEM@gmail.com">SammolloDEM@gmail.com</a>
+    <span>Draâ El Mizan · Tizi-Ouzou</span>
+  </div>
+
+  <div class="footer-bottom">
+    Copyright © 2025 All rights reserved | made by
+    <strong>Belaouche Abdellah, Sahli Redha</strong>
+  </div>
+</footer>
+
+<aside class="cart-drawer" id="cartDrawer" aria-hidden="true">
+  <div class="cart-head">
+    <div><p class="eyebrow dark">PANIER</p><h2>Votre commande</h2></div>
+    <button type="button" id="closeCart" aria-label="Fermer">×</button>
+  </div>
+  <div id="cartItems" class="cart-items"><p class="muted">Votre panier est vide.</p></div>
+  <div class="cart-total"><span>Total estimé</span><strong id="cartTotal">0 DA</strong></div>
+  <button class="btn btn-gold full" type="button" id="checkoutBtn">Passer la commande</button>
+  <p class="cart-note">Le serveur vérifie les prix et la disponibilité avant d’enregistrer la commande.</p>
+</aside>
+<div class="drawer-backdrop" id="drawerBackdrop"></div>
+
+<div class="modal-backdrop" id="orderBackdrop" hidden>
+  <div class="order-modal">
+    <button class="modal-close" id="closeOrder" type="button" aria-label="Fermer">×</button>
+    <p class="eyebrow dark">FINALISER</p>
+    <h2>Vos informations</h2>
+    <p class="modal-lead">Renseignez vos coordonnées pour transmettre la commande au restaurant.</p>
+    <form id="orderForm">
+      <div class="form-grid">
+        <label>Nom et prénom *<input name="customerName" required minlength="2"></label>
+        <label>Téléphone *<input name="customerPhone" required minlength="6"></label>
+      </div>
+      <div class="form-grid">
+        <label>Email<input name="customerEmail" type="email"></label>
+        <label>Type de commande<select name="orderType"><option value="pickup">À emporter</option><option value="dine_in">Sur place</option></select></label>
+      </div>
+      <label>Note pour le restaurant<textarea name="notes" rows="3" placeholder="Ex. sans oignon, heure souhaitée…"></textarea></label>
+      <button class="btn btn-gold full" type="submit">Confirmer la commande</button>
+      <p id="orderStatus" class="form-status"></p>
+    </form>
+  </div>
+</div>
+
+<script src="assets/js/site.js"></script>
+<script src="assets/js/menu.js"></script>
+</body>
+</html>
