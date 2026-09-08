@@ -32,33 +32,46 @@
   <div id="appPanel" class="admin-shell" hidden>
     <aside class="admin-side">
       <div class="admin-brand"><img src="/image/logorestaurant.png" alt="Logo SAMMOLLO"><div><strong>SAMMOLLO</strong><small>BACK-OFFICE</small></div></div>
-      <div class="side-section-label">GESTION</div>
-      <nav aria-label="Navigation administration">
-        <button class="side-link active" data-view="dashboard" type="button"><span class="nav-mark">01</span><span>Tableau de bord</span></button>
-        <button class="side-link" data-view="orders" type="button"><span class="nav-mark">02</span><span>Commandes</span><b id="pendingOrderDot" class="nav-badge" hidden>0</b></button>
-        <button class="side-link" data-view="payments" type="button"><span class="nav-mark">03</span><span>Paiements</span></button>
-        <button class="side-link" data-view="messages" type="button"><span class="nav-mark">04</span><span>Messages</span><b id="newMessageDot" class="nav-badge" hidden>0</b></button>
-        <button class="side-link" data-view="menu" type="button"><span class="nav-mark">05</span><span>Carte & produits</span></button>
-        <button class="side-link" data-view="events" type="button"><span class="nav-mark">06</span><span>Événements</span></button>
-      </nav>
+
+      <div class="side-group">
+        <div class="side-section-label">GESTION</div>
+        <nav aria-label="Gestion administration">
+          <button class="side-link active" data-view="dashboard" type="button"><span class="nav-mark">01</span><span>Tableau de bord</span></button>
+          <button class="side-link" data-view="orders" type="button"><span class="nav-mark">02</span><span>Commandes</span><b id="pendingOrderDot" class="nav-badge" hidden>0</b></button>
+          <button class="side-link" data-view="payments" type="button"><span class="nav-mark">03</span><span>Paiements</span></button>
+          <button class="side-link" data-view="messages" type="button"><span class="nav-mark">04</span><span>Messages</span><b id="newMessageDot" class="nav-badge" hidden>0</b></button>
+        </nav>
+      </div>
+
+      <div class="side-group side-group-content">
+        <div class="side-section-label">CONTENU</div>
+        <nav aria-label="Contenu administration">
+          <button class="side-link" data-view="menu" type="button"><span class="nav-mark">05</span><span>Carte & produits</span></button>
+          <button class="side-link" data-view="events" type="button"><span class="nav-mark">06</span><span>Événements</span></button>
+        </nav>
+      </div>
+
       <div class="side-bottom"><a href="/index.html"><span>←</span><span>Voir le site</span></a><button id="logoutBtn" class="logout-link" type="button"><span>↪</span><span>Déconnexion</span></button></div>
     </aside>
 
     <main class="admin-main">
       <header class="admin-top">
-        <div><p class="kicker">SAMMOLLO · ADMINISTRATION</p><h1 id="viewTitle">Tableau de bord</h1><p class="top-subtitle" id="viewSubtitle">Vue générale de l'activité du restaurant.</p></div>
-        <div class="admin-profile"><div class="admin-avatar">S</div><div class="admin-profile-copy"><span class="admin-profile-status"><i></i> Connecté</span><strong id="adminName">Administrateur</strong></div></div>
+        <div class="admin-heading"><p class="kicker">SAMMOLLO · ADMINISTRATION</p><h1 id="viewTitle">Tableau de bord</h1><p class="top-subtitle" id="viewSubtitle">Vue générale de l'activité du restaurant.</p></div>
+        <div class="top-actions">
+          <div class="top-clock" aria-label="Date actuelle"><span id="adminDate">—</span><small id="adminTime">—</small></div>
+          <div class="admin-profile"><div class="admin-avatar">S</div><div class="admin-profile-copy"><span class="admin-profile-status"><i></i> Connecté</span><strong id="adminName">Administrateur</strong></div></div>
+        </div>
       </header>
 
-      <section class="metrics" aria-label="Indicateurs">
-        <article><span class="metric-index">01</span><p>Nouveaux messages</p><strong id="metricMessages">—</strong><small>À consulter</small></article>
-        <article><span class="metric-index">02</span><p>Commandes en attente</p><strong id="metricOrders">—</strong><small>À confirmer</small></article>
-        <article><span class="metric-index">03</span><p>CA payé aujourd’hui</p><strong id="metricRevenue">—</strong><small>Dinars algériens</small></article>
-        <article><span class="metric-index">04</span><p>Produits disponibles</p><strong id="metricItems">—</strong><small>Sur la carte</small></article>
+      <section id="metricsPanel" class="metrics" aria-label="Indicateurs">
+        <article class="metric-card metric-message"><span class="metric-index">01</span><span class="metric-icon" aria-hidden="true">✉</span><p>Nouveaux messages</p><strong id="metricMessages">—</strong><small>Demandes à consulter</small></article>
+        <article class="metric-card metric-order"><span class="metric-index">02</span><span class="metric-icon" aria-hidden="true">▣</span><p>Commandes en attente</p><strong id="metricOrders">—</strong><small>Demandes à confirmer</small></article>
+        <article class="metric-card metric-revenue"><span class="metric-index">03</span><span class="metric-icon metric-icon-text" aria-hidden="true">DA</span><p>CA payé aujourd’hui</p><strong id="metricRevenue">—</strong><small>Chiffre d’affaires encaissé</small></article>
+        <article class="metric-card metric-product"><span class="metric-index">04</span><span class="metric-icon" aria-hidden="true">◇</span><p>Produits disponibles</p><strong id="metricItems">—</strong><small>Actuellement sur la carte</small></article>
       </section>
 
       <section class="admin-card" id="contentCard">
-        <div class="card-head"><div><p class="kicker" id="contentKicker">ACTIVITÉ</p><h2 id="contentTitle">Vue d’ensemble</h2></div><button class="secondary-btn" id="refreshBtn" type="button">↻ Actualiser</button></div>
+        <div class="card-head"><div><p class="kicker" id="contentKicker">ACTIVITÉ</p><h2 id="contentTitle">Vue d’ensemble</h2></div><button class="secondary-btn refresh-btn" id="refreshBtn" type="button"><span aria-hidden="true">↻</span> Actualiser</button></div>
         <div id="viewContent" class="table-wrap"><p class="empty">Chargement…</p></div>
       </section>
     </main>

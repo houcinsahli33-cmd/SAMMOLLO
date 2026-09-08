@@ -1,6 +1,6 @@
 (()=>{
   const $=(s,r=document)=>r.querySelector(s); const $$=(s,r=document)=>[...r.querySelectorAll(s)];
-  const loginPanel=$('#loginPanel'), appPanel=$('#appPanel'), viewContent=$('#viewContent');
+  const loginPanel=$('#loginPanel'), appPanel=$('#appPanel'), viewContent=$('#viewContent'), metricsPanel=$('#metricsPanel');
   const title=$('#viewTitle'), subtitle=$('#viewSubtitle'), contentTitle=$('#contentTitle'), contentKicker=$('#contentKicker');
   const loginForm=$('#loginForm'), loginStatus=$('#loginStatus'), loginSubmit=$('#loginSubmit');
   const passwordInput=$('#adminPassword'), togglePassword=$('#togglePassword');
@@ -11,17 +11,19 @@
   const paymentLabels={unpaid:'Non payé',pending:'En attente',paid:'Payé',failed:'Échoué',refunded:'Remboursé'};
   const messageLabels={new:'Nouveau',read:'Lu',replied:'Répondu',archived:'Archivé'};
   const viewMeta={
-    dashboard:{title:'Tableau de bord',subtitle:"Vue générale de l'activité du restaurant.",kicker:'ACTIVITÉ',content:'Vue d’ensemble'},
+    dashboard:{title:'Tableau de bord',subtitle:"Pilotez l’activité SAMMOLLO depuis un seul espace.",kicker:'ACTIVITÉ',content:'Centre de contrôle'},
     orders:{title:'Commandes',subtitle:'Confirmez les demandes et suivez chaque commande.',kicker:'COMMANDES',content:'Gestion des commandes'},
     payments:{title:'Paiements',subtitle:'Suivez les paiements en ligne et leur état.',kicker:'PAIEMENTS',content:'Transactions'},
     messages:{title:'Messages',subtitle:'Consultez et classez les demandes du formulaire Contact.',kicker:'CONTACT',content:'Messages reçus'},
-    menu:{title:'Carte & produits',subtitle:'Modifiez les produits visibles sur la carte.',kicker:'CARTE',content:'Produits du menu'},
+    menu:{title:'Carte & produits',subtitle:'Modifiez les produits visibles sur la carte.',kicker:'CARTE',content:'Gestion du menu'},
     events:{title:'Événements',subtitle:'Gérez les événements publiés sur le site SAMMOLLO.',kicker:'ÉVÉNEMENTS',content:'Programmation'}
   };
 
   const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
   const money=n=>new Intl.NumberFormat('fr-DZ').format(Number(n)||0)+' DA';
   const dt=v=>v?new Date(v).toLocaleString('fr-FR'):'—';
+  const shortDate=v=>v?new Date(v).toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'2-digit'}):'—';
+  const shortTime=v=>v?new Date(v).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}):'—';
   const badge=(text,kind='')=>`<span class="badge ${kind}">${esc(text)}</span>`;
   const empty=t=>`<div class="empty-state"><span class="empty-state-mark">S</span><strong>${esc(t)}</strong></div>`;
 
@@ -37,7 +39,15 @@
   function showApp(){loginPanel.hidden=true;appPanel.hidden=false;document.body.classList.add('admin-authenticated');}
   function openModal(m){m.hidden=false;document.body.classList.add('modal-open');}
   function closeModal(m){if(!m)return;m.hidden=true;if([logoutModal,credentialsModal,orderDetailModal].every(x=>x.hidden))document.body.classList.remove('modal-open');}
-  function setMeta(view){const m=viewMeta[view]||viewMeta.dashboard;title.textContent=m.title;subtitle.textContent=m.subtitle;contentKicker.textContent=m.kicker;contentTitle.textContent=m.content;}
+  function setMeta(view){const m=viewMeta[view]||viewMeta.dashboard;title.textContent=m.title;subtitle.textContent=m.subtitle;contentKicker.textContent=m.kicker;contentTitle.textContent=m.content;metricsPanel.hidden=view!=='dashboard';}
+
+  function updateClock(){
+    const now=new Date();
+    const dateEl=$('#adminDate'), timeEl=$('#adminTime');
+    if(dateEl)dateEl.textContent=now.toLocaleDateString('fr-FR',{weekday:'short',day:'2-digit',month:'short'}).replace('.','');
+    if(timeEl)timeEl.textContent=now.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+  }
+  updateClock(); setInterval(updateClock,30000);
 
   async function metrics(){
     const d=await api('/api/admin/dashboard');
@@ -69,17 +79,128 @@
     }catch(e){$('#orderDetailBody').innerHTML=`<p class="empty error-text">${esc(e.message)}</p>`;}
   }
 
+  function bindJumpButtons(root=document){
+    $$('[data-jump]',root).forEach(b=>b.addEventListener('click',()=>render(b.dataset.jump).catch(e=>viewContent.innerHTML=`<p class="empty error-text">${esc(e.message)}</p>`)));
+  }
+
+  async function renderDashboard(){
+    const [d,orders,payments,messages]=await Promise.all([metrics(),api('/api/admin/orders'),api('/api/admin/payments'),api('/api/admin/messages')]);
+    const totalOrders=orders.length||1;
+    const counts={pending:0,confirmed:0,preparing:0,ready:0,completed:0,cancelled:0};
+    orders.forEach(o=>{if(counts[o.status]!==undefined)counts[o.status]++;});
+    const recent=orders.slice(0,5);
+    const paidToday=payments.filter(p=>p.status==='paid'&&new Date(p.updated_at||p.created_at).toDateString()===new Date().toDateString()).length;
+    const newMessages=messages.filter(m=>m.status==='new').length;
+    const pct=n=>Math.max(0,Math.min(100,Math.round((n/totalOrders)*100)));
+    const updatedAt=new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+
+    viewContent.innerHTML=`
+      <div class="dashboard-v3">
+        <section class="dashboard-hero-v3">
+          <div>
+            <p class="kicker">CENTRE DE CONTRÔLE</p>
+            <h3>Bienvenue dans votre espace SAMMOLLO.</h3>
+            <p class="dashboard-copy">Suivez les commandes, paiements et messages importants, puis accédez rapidement aux actions qui nécessitent votre attention.</p>
+          </div>
+          <div class="dashboard-hero-meta">
+            <span class="system-pill"><i></i> TiDB / MySQL connecté</span>
+            <span class="sync-pill">Dernière actualisation · ${updatedAt}</span>
+          </div>
+        </section>
+
+        <div class="dashboard-grid-v3">
+          <div class="dashboard-col">
+            <section class="dash-panel">
+              <div class="dash-panel-head"><div><h3>À traiter maintenant</h3><p>Les éléments qui demandent votre attention.</p></div></div>
+              <div class="attention-grid">
+                <button class="attention-card urgent" type="button" data-jump="orders"><span class="attention-top">Commandes <b class="attention-arrow">→</b></span><strong class="attention-count">${d.pendingOrders}</strong><span class="attention-label">à confirmer</span></button>
+                <button class="attention-card" type="button" data-jump="messages"><span class="attention-top">Messages <b class="attention-arrow">→</b></span><strong class="attention-count">${newMessages}</strong><span class="attention-label">nouveaux messages</span></button>
+                <button class="attention-card successful" type="button" data-jump="payments"><span class="attention-top">Paiements <b class="attention-arrow">→</b></span><strong class="attention-count">${paidToday}</strong><span class="attention-label">reçus aujourd’hui</span></button>
+              </div>
+            </section>
+
+            <section class="dash-panel">
+              <div class="dash-panel-head"><div><h3>Commandes récentes</h3><p>Les cinq dernières demandes enregistrées.</p></div><button class="panel-link" type="button" data-jump="orders">Voir toutes →</button></div>
+              <div class="recent-list">
+                ${recent.length?recent.map(o=>`<div class="recent-order"><div class="recent-client"><strong>${esc(o.customer_name)}</strong><small>${shortDate(o.created_at)} · ${shortTime(o.created_at)}</small></div><div class="recent-ref"><code>${esc(o.public_id).slice(0,8).toUpperCase()}</code><small>${statusLabels[o.status]||esc(o.status)}</small></div><div class="recent-total">${money(o.total)}</div><div class="recent-actions"><button class="mini-btn" type="button" data-dashboard-details="${o.id}">Détails</button></div></div>`).join(''):empty('Aucune commande pour le moment.')}
+              </div>
+            </section>
+          </div>
+
+          <div class="dashboard-col side">
+            <section class="dash-panel">
+              <div class="dash-panel-head"><div><h3>État des commandes</h3><p>Répartition des 100 dernières commandes.</p></div></div>
+              <div class="status-list">
+                <div class="status-row"><span>En attente</span><div class="status-track"><div class="status-fill" style="width:${pct(counts.pending)}%"></div></div><strong>${counts.pending}</strong></div>
+                <div class="status-row"><span>Confirmées</span><div class="status-track"><div class="status-fill" style="width:${pct(counts.confirmed)}%"></div></div><strong>${counts.confirmed}</strong></div>
+                <div class="status-row"><span>Préparation</span><div class="status-track"><div class="status-fill green" style="width:${pct(counts.preparing)}%"></div></div><strong>${counts.preparing}</strong></div>
+                <div class="status-row"><span>Prêtes</span><div class="status-track"><div class="status-fill green" style="width:${pct(counts.ready)}%"></div></div><strong>${counts.ready}</strong></div>
+                <div class="status-row"><span>Terminées</span><div class="status-track"><div class="status-fill gray" style="width:${pct(counts.completed)}%"></div></div><strong>${counts.completed}</strong></div>
+                <div class="status-row"><span>Annulées</span><div class="status-track"><div class="status-fill red" style="width:${pct(counts.cancelled)}%"></div></div><strong>${counts.cancelled}</strong></div>
+              </div>
+            </section>
+
+            <section class="dash-panel">
+              <div class="dash-panel-head"><div><h3>Raccourcis</h3><p>Accédez rapidement aux outils courants.</p></div></div>
+              <div class="quick-actions">
+                <button class="quick-action" type="button" data-jump="orders"><b>01</b><strong>Commandes</strong><span>Confirmer et suivre</span></button>
+                <button class="quick-action" type="button" data-jump="menu"><b>02</b><strong>Carte</strong><span>Prix et disponibilité</span></button>
+                <button class="quick-action" type="button" data-jump="messages"><b>03</b><strong>Messages</strong><span>Consulter les demandes</span></button>
+                <button class="quick-action" type="button" data-jump="events"><b>04</b><strong>Événements</strong><span>Gérer les publications</span></button>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>`;
+    bindJumpButtons(viewContent);
+    $$('[data-dashboard-details]',viewContent).forEach(b=>b.addEventListener('click',()=>showOrderDetails(b.dataset.dashboardDetails)));
+  }
+
+  async function renderMenu(){
+    const rows=await api('/api/menu'); if(!rows.length){viewContent.innerHTML=empty('Aucun produit enregistré.');return;}
+    const categories=[...new Set(rows.map(x=>x.category).filter(Boolean))];
+    viewContent.innerHTML=`<div class="menu-manager">
+      <div class="menu-toolbar">
+        <input id="menuSearch" class="menu-search" type="search" placeholder="Rechercher un produit…" aria-label="Rechercher un produit">
+        <select id="menuCategoryFilter" class="menu-filter" aria-label="Filtrer par catégorie"><option value="">Toutes les catégories</option>${categories.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('')}</select>
+        <select id="menuAvailabilityFilter" class="menu-filter" aria-label="Filtrer par disponibilité"><option value="">Tous les produits</option><option value="available">Disponibles</option><option value="unavailable">Indisponibles</option></select>
+        <span id="menuCount" class="menu-count">${rows.length} produits</span>
+      </div>
+      <div class="menu-editor-head"><span>Catégorie</span><span>Produit</span><span>Description</span><span>Prix</span><span>Disponibilité</span><span>Action</span></div>
+      <div id="menuEditorList">${rows.map(x=>`<div class="menu-edit-v3" data-id="${x.id}" data-name="${esc(String(x.name).toLowerCase())}" data-category="${esc(x.category||'')}" data-available="${x.available?'available':'unavailable'}"><span class="product-category">${esc(x.category||'Sans catégorie')}</span><input aria-label="Nom" data-f="name" type="text" value="${esc(x.name)}"><input aria-label="Description" data-f="description" type="text" value="${esc(x.description)}"><input aria-label="Prix" data-f="price" type="number" min="0" value="${x.price}"><label class="availability"><input data-f="available" type="checkbox" ${x.available?'checked':''}><span>Disponible</span></label><button class="save-product" type="button">Enregistrer</button></div>`).join('')}</div>
+    </div>`;
+
+    const search=$('#menuSearch'), category=$('#menuCategoryFilter'), availability=$('#menuAvailabilityFilter'), count=$('#menuCount');
+    const applyFilters=()=>{
+      const q=search.value.trim().toLowerCase(), cat=category.value, av=availability.value; let visible=0;
+      $$('.menu-edit-v3',viewContent).forEach(row=>{const show=(!q||row.dataset.name.includes(q))&&(!cat||row.dataset.category===cat)&&(!av||row.dataset.available===av);row.hidden=!show;if(show)visible++;});
+      count.textContent=`${visible} produit${visible>1?'s':''}`;
+    };
+    [search,category,availability].forEach(el=>el.addEventListener(el===search?'input':'change',applyFilters));
+
+    $$('.menu-edit-v3',viewContent).forEach(row=>{
+      const availableInput=row.querySelector('[data-f="available"]');
+      availableInput.addEventListener('change',()=>{row.dataset.available=availableInput.checked?'available':'unavailable';applyFilters();});
+      row.querySelector('button').addEventListener('click',async()=>{
+        const v=f=>row.querySelector(`[data-f="${f}"]`), b=row.querySelector('button');
+        b.disabled=true;b.textContent='Enregistrement…';
+        try{
+          await api(`/api/admin/menu/${row.dataset.id}`,{method:'PATCH',body:JSON.stringify({name:v('name').value,description:v('description').value,price:Number(v('price').value),available:v('available').checked,featured:false,badge:''})});
+          row.dataset.name=v('name').value.toLowerCase();row.dataset.available=v('available').checked?'available':'unavailable';b.classList.add('saved');b.textContent='Enregistré ✓';setTimeout(()=>{b.classList.remove('saved');b.textContent='Enregistrer';},1400);
+        }catch(e){b.textContent='Erreur';setTimeout(()=>b.textContent='Enregistrer',1400);alert(e.message);}
+        finally{b.disabled=false;}
+      });
+    });
+  }
+
   async function render(view=current){
     current=view; $$('.side-link').forEach(b=>b.classList.toggle('active',b.dataset.view===view)); setMeta(view);
     viewContent.innerHTML='<div class="loading-state"><span></span><p>Chargement des données…</p></div>';
 
-    if(view==='dashboard'){
-      const d=await metrics();
-      viewContent.innerHTML=`<div class="dashboard-welcome"><div><p class="kicker">SYSTÈME OPÉRATIONNEL</p><h3>Bienvenue dans votre espace SAMMOLLO.</h3><p>Vous pouvez confirmer les commandes, suivre les paiements, consulter les messages, mettre à jour la carte et gérer les événements depuis un seul espace.</p></div><div class="system-status"><i></i><span>TiDB / MySQL connecté</span></div></div><div class="dashboard-mini"><article><span>Commandes aujourd’hui</span><strong>${d.todayOrders}</strong></article><article><span>Commandes actives</span><strong>${d.activeOrders}</strong></article><article><span>Paiements reçus aujourd’hui</span><strong>${d.paidPayments}</strong></article></div>`;
-      return;
-    }
+    if(view==='dashboard'){await renderDashboard();return;}
 
     if(view==='orders'){
+      await metrics();
       const rows=await api('/api/admin/orders'); if(!rows.length){viewContent.innerHTML=empty('Aucune commande pour le moment.');return;}
       viewContent.innerHTML=`<table class="data-table orders-table"><thead><tr><th>Date</th><th>Réf.</th><th>Client</th><th>Total</th><th>Paiement</th><th>Statut</th><th>Actions</th></tr></thead><tbody>${rows.map(o=>`<tr class="${o.status==='pending'?'row-highlight':''}"><td>${dt(o.created_at)}</td><td><code>${esc(o.public_id).slice(0,8).toUpperCase()}</code></td><td><strong>${esc(o.customer_name)}</strong><small>${esc(o.customer_phone)}</small></td><td><strong>${money(o.total)}</strong></td><td>${badge(paymentLabels[o.payment_status]||o.payment_status,o.payment_status==='paid'?'success':o.payment_status==='failed'?'danger':'')}</td><td><select class="status-select" data-order-status="${o.id}">${Object.entries(statusLabels).map(([k,v])=>`<option value="${k}" ${k===o.status?'selected':''}>${v}</option>`).join('')}</select></td><td><div class="action-group">${o.status==='pending'?`<button class="mini-btn success" data-confirm="${o.id}">Confirmer</button><button class="mini-btn danger" data-cancel="${o.id}">Refuser</button>`:''}<button class="mini-btn" data-details="${o.id}">Détails</button></div></td></tr>`).join('')}</tbody></table>`;
       $$('[data-order-status]').forEach(s=>s.addEventListener('change',()=>setOrderStatus(s.dataset.orderStatus,s.value).catch(e=>alert(e.message))));
@@ -102,11 +223,7 @@
       return;
     }
 
-    if(view==='menu'){
-      const rows=await api('/api/menu'); if(!rows.length){viewContent.innerHTML=empty('Aucun produit enregistré.');return;}
-      viewContent.innerHTML=`<div class="inline-note">Les changements sont enregistrés directement dans TiDB / MySQL.</div>${rows.map(x=>`<div class="menu-edit" data-id="${x.id}"><input aria-label="Nom" data-f="name" value="${esc(x.name)}"><input aria-label="Description" data-f="description" value="${esc(x.description)}"><input aria-label="Prix" data-f="price" type="number" min="0" value="${x.price}"><label class="availability"><input data-f="available" type="checkbox" ${x.available?'checked':''}><span>Disponible</span></label><button type="button">Enregistrer</button></div>`).join('')}`;
-      $$('.menu-edit').forEach(row=>row.querySelector('button').addEventListener('click',async()=>{const v=f=>row.querySelector(`[data-f="${f}"]`);await api(`/api/admin/menu/${row.dataset.id}`,{method:'PATCH',body:JSON.stringify({name:v('name').value,description:v('description').value,price:Number(v('price').value),available:v('available').checked,featured:false,badge:''})});const b=row.querySelector('button');b.textContent='Enregistré ✓';setTimeout(()=>b.textContent='Enregistrer',1200);})); return;
-    }
+    if(view==='menu'){await renderMenu();return;}
 
     if(view==='events'){
       const rows=await api('/api/admin/events'); if(!rows.length){viewContent.innerHTML=empty('Aucun événement enregistré.');return;}
