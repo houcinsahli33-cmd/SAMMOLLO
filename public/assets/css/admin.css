@@ -347,3 +347,56 @@ button{color:inherit}
   .menu-toolbar{grid-template-columns:1fr}
   .menu-edit-v3{grid-template-columns:1fr}
 }
+
+
+/* ==========================================================
+   SAMMOLLO ADMIN — AJOUT PRODUIT + PROFIL
+   ========================================================== */
+.card-head-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.product-add-btn{min-width:170px}
+
+.product-dialog{width:min(760px,calc(100vw - 28px));max-height:calc(100dvh - 32px);overflow:auto;padding:28px}
+.dialog-description{margin:7px 0 22px;color:#858d92;font-size:11px;line-height:1.6}
+.product-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.product-field{display:grid;gap:8px}
+.product-field-full{grid-column:1/-1}
+.product-field label,.product-form>label{font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:#9aa1a6;font-weight:750}
+.product-field input,.product-field select,.product-field textarea{
+  width:100%;border:1px solid #30363b;border-radius:10px;background:#090c0e;color:#eef0f1;outline:none;font:inherit;font-size:11px
+}
+.product-field input,.product-field select{height:44px;padding:0 12px}
+.product-field textarea{padding:12px;resize:vertical;min-height:96px}
+.product-field input:focus,.product-field select:focus,.product-field textarea:focus{border-color:#745c30;box-shadow:0 0 0 3px rgba(213,154,45,.055)}
+.product-upload-box{display:grid;grid-template-columns:minmax(0,1fr) 180px;gap:14px;align-items:center;padding:14px;border:1px dashed #3a4045;border-radius:12px;background:#0a0d0f}
+.product-upload-box input[type="file"]{height:auto;padding:10px;background:#0d1012}
+.product-upload-box small{grid-column:1/-1;color:#666f75;font-size:9px}
+.product-image-preview{height:130px;border-radius:10px;overflow:hidden;border:1px solid #252a2e;background:#080a0c;display:grid;place-items:center;color:#60686e;font-size:9px;text-align:center}
+.product-image-preview img{width:100%;height:100%;object-fit:cover;display:block}
+.product-availability{display:flex!important;align-items:center;gap:10px;min-height:44px;padding:0 12px;border:1px solid #30363b;border-radius:10px;background:#090c0e;color:#bbc0c4!important;text-transform:none!important;letter-spacing:0!important;font-size:10px!important}
+.product-availability input{accent-color:#d59a2d}
+.product-actions{margin-top:18px}
+.form-message.success{color:#80c996}
+
+.profile-grid-admin{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:16px}
+.profile-card-admin{border:1px solid #282d31;border-radius:14px;background:#0c0f11;padding:22px}
+.profile-card-admin h3{margin:6px 0 18px;font-family:'Cormorant Garamond',serif;font-size:29px;color:#f0eee9}
+.profile-form-admin{display:grid;gap:14px}
+.profile-form-admin>label{display:grid;gap:7px;color:#8f979c;font-size:9px;text-transform:uppercase;letter-spacing:.08em;font-weight:750}
+.profile-form-admin input{width:100%;height:44px;border:1px solid #30363b;border-radius:9px;background:#090c0e;color:#edf0f1;padding:0 12px;outline:none;font-size:11px}
+.profile-form-admin input:focus{border-color:#745c30;box-shadow:0 0 0 3px rgba(213,154,45,.055)}
+.profile-password-wrap{position:relative}
+.profile-password-wrap input{padding-right:46px}
+.profile-password-wrap button{position:absolute;right:5px;top:5px;width:34px;height:34px;border:0;border-radius:8px;background:#14181b;color:#c4c8ca;cursor:pointer}
+.profile-password-wrap button:hover{background:#1d2226;color:var(--gold2)}
+.admin-profile{border:0;cursor:pointer;text-align:left}
+.admin-profile:hover{filter:brightness(1.08)}
+
+@media(max-width:760px){
+  .product-form-grid,.profile-grid-admin{grid-template-columns:1fr}
+  .product-field-full{grid-column:auto}
+  .product-upload-box{grid-template-columns:1fr}
+  .product-upload-box small{grid-column:auto}
+  .product-image-preview{height:180px}
+  .card-head-actions{width:100%}
+  .product-add-btn,.refresh-btn{flex:1}
+}

@@ -5,7 +5,10 @@
   const loginForm=$('#loginForm'), loginStatus=$('#loginStatus'), loginSubmit=$('#loginSubmit');
   const passwordInput=$('#adminPassword'), togglePassword=$('#togglePassword');
   const logoutModal=$('#logoutModal'), credentialsModal=$('#credentialsModal'), orderDetailModal=$('#orderDetailModal');
+  const productModal=$('#productModal'), productForm=$('#productForm'), productImage=$('#productImage'), productImagePreview=$('#productImagePreview');
+  const openProductModalBtn=$('#openProductModal');
   let current='dashboard';
+  let currentAdmin={displayName:'Administrateur',email:''};
 
   const statusLabels={pending:'En attente',confirmed:'Confirmée',preparing:'En préparation',ready:'Prête',completed:'Terminée',cancelled:'Annulée'};
   const paymentLabels={unpaid:'Non payé',pending:'En attente',paid:'Payé',failed:'Échoué',refunded:'Remboursé'};
@@ -16,7 +19,8 @@
     payments:{title:'Paiements',subtitle:'Suivez les paiements en ligne et leur état.',kicker:'PAIEMENTS',content:'Transactions'},
     messages:{title:'Messages',subtitle:'Consultez et classez les demandes du formulaire Contact.',kicker:'CONTACT',content:'Messages reçus'},
     menu:{title:'Carte & produits',subtitle:'Modifiez les produits visibles sur la carte.',kicker:'CARTE',content:'Gestion du menu'},
-    events:{title:'Événements',subtitle:'Gérez les événements publiés sur le site SAMMOLLO.',kicker:'ÉVÉNEMENTS',content:'Programmation'}
+    events:{title:'Événements',subtitle:'Gérez les événements publiés sur le site SAMMOLLO.',kicker:'ÉVÉNEMENTS',content:'Programmation'},
+    profile:{title:'Profil administrateur',subtitle:'Gérez votre nom, votre email et votre mot de passe.',kicker:'COMPTE',content:'Mon profil'}
   };
 
   const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
@@ -26,6 +30,7 @@
   const shortTime=v=>v?new Date(v).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}):'—';
   const badge=(text,kind='')=>`<span class="badge ${kind}">${esc(text)}</span>`;
   const empty=t=>`<div class="empty-state"><span class="empty-state-mark">S</span><strong>${esc(t)}</strong></div>`;
+  const slugify=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
 
   async function api(url,opts={}){
     const r=await fetch(url,{...opts,credentials:'same-origin',headers:{'Content-Type':'application/json',...(opts.headers||{})}});
@@ -38,8 +43,8 @@
   function showLogin(){appPanel.hidden=true;loginPanel.hidden=false;document.body.classList.remove('admin-authenticated');closeModal(logoutModal);closeModal(orderDetailModal);setTimeout(()=>$('#adminEmail')?.focus(),60);}
   function showApp(){loginPanel.hidden=true;appPanel.hidden=false;document.body.classList.add('admin-authenticated');}
   function openModal(m){m.hidden=false;document.body.classList.add('modal-open');}
-  function closeModal(m){if(!m)return;m.hidden=true;if([logoutModal,credentialsModal,orderDetailModal].every(x=>x.hidden))document.body.classList.remove('modal-open');}
-  function setMeta(view){const m=viewMeta[view]||viewMeta.dashboard;title.textContent=m.title;subtitle.textContent=m.subtitle;contentKicker.textContent=m.kicker;contentTitle.textContent=m.content;metricsPanel.hidden=view!=='dashboard';}
+  function closeModal(m){if(!m)return;m.hidden=true;if([logoutModal,credentialsModal,orderDetailModal,productModal].filter(Boolean).every(x=>x.hidden))document.body.classList.remove('modal-open');}
+  function setMeta(view){const m=viewMeta[view]||viewMeta.dashboard;title.textContent=m.title;subtitle.textContent=m.subtitle;contentKicker.textContent=m.kicker;contentTitle.textContent=m.content;metricsPanel.hidden=view!=='dashboard';if(openProductModalBtn)openProductModalBtn.hidden=view!=='menu';}
 
   function updateClock(){
     const now=new Date();
@@ -193,6 +198,80 @@
     });
   }
 
+
+  async function loadProductCategories(){
+    const select=$('#productCategory');
+    if(!select)return;
+    const categories=await api('/api/admin/categories');
+    select.innerHTML='<option value="">Sélectionner une catégorie</option>'+categories.filter(c=>c.active!==0).map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  }
+
+  function resetProductForm(){
+    if(!productForm)return;
+    productForm.reset();
+    $('#productImageUrl').value='';
+    $('#productAvailable').checked=true;
+    $('#productFormStatus').textContent='';
+    $('#productFormStatus').classList.remove('error','success');
+    if(productImagePreview)productImagePreview.innerHTML='<span>Aucune photo sélectionnée</span>';
+  }
+
+  async function openProductDialog(){
+    resetProductForm();
+    try{await loadProductCategories();openModal(productModal);setTimeout(()=>$('#productCategory')?.focus(),50);}
+    catch(e){alert(e.message);}
+  }
+
+  async function uploadProductImage(file){
+    if(!file)throw new Error('Choisissez une photo.');
+    const allowed=['image/jpeg','image/png','image/webp'];
+    if(!allowed.includes(file.type))throw new Error('Format non autorisé. Utilisez JPG, PNG ou WebP.');
+    if(file.size>5*1024*1024)throw new Error('La photo dépasse 5 Mo.');
+    const r=await fetch('/api/admin/uploads/product-image',{
+      method:'POST',credentials:'same-origin',headers:{'Content-Type':file.type,'X-File-Name':file.name},body:file
+    });
+    const j=await r.json().catch(()=>({}));
+    if(r.status===401){showLogin();throw new Error(j.message||'Session expirée.');}
+    if(!r.ok)throw new Error(j.message||"Impossible d'envoyer la photo.");
+    return j;
+  }
+
+  async function renderProfile(){
+    let profile=currentAdmin;
+    try{profile=await api('/api/admin/profile');currentAdmin={...currentAdmin,...profile};}catch(e){if(e.message!=='Endpoint introuvable.')throw e;}
+    viewContent.innerHTML=`
+      <div class="profile-grid-admin">
+        <section class="profile-card-admin">
+          <p class="kicker">INFORMATIONS</p>
+          <h3>Profil administrateur</h3>
+          <form id="profileInfoForm" class="profile-form-admin">
+            <label>Nom affiché<input id="profileDisplayName" type="text" maxlength="120" value="${esc(currentAdmin.displayName||currentAdmin.display_name||'Administrateur')}" required></label>
+            <label>Adresse email<input id="profileEmail" type="email" maxlength="180" value="${esc(currentAdmin.email||'')}" required></label>
+            <label>Mot de passe actuel<input id="profileCurrentPassword" type="password" autocomplete="current-password" placeholder="Requis pour changer l’email"></label>
+            <button class="admin-btn" type="submit">Enregistrer le profil</button>
+            <p id="profileInfoStatus" class="form-message" role="status"></p>
+          </form>
+        </section>
+        <section class="profile-card-admin">
+          <p class="kicker">SÉCURITÉ</p>
+          <h3>Changer le mot de passe</h3>
+          <form id="profilePasswordForm" class="profile-form-admin">
+            <label>Mot de passe actuel<div class="profile-password-wrap"><input id="oldPassword" type="password" autocomplete="current-password" required><button type="button" data-toggle-profile-password="oldPassword" aria-label="Afficher le mot de passe">◉</button></div></label>
+            <label>Nouveau mot de passe<div class="profile-password-wrap"><input id="newPassword" type="password" autocomplete="new-password" minlength="12" required><button type="button" data-toggle-profile-password="newPassword" aria-label="Afficher le mot de passe">◉</button></div></label>
+            <label>Confirmer le nouveau mot de passe<div class="profile-password-wrap"><input id="confirmPassword" type="password" autocomplete="new-password" minlength="12" required><button type="button" data-toggle-profile-password="confirmPassword" aria-label="Afficher le mot de passe">◉</button></div></label>
+            <button class="admin-btn" type="submit">Changer le mot de passe</button>
+            <p id="profilePasswordStatus" class="form-message" role="status"></p>
+          </form>
+        </section>
+      </div>`;
+
+    $$('[data-toggle-profile-password]',viewContent).forEach(b=>b.addEventListener('click',()=>{const input=$('#'+b.dataset.toggleProfilePassword);if(!input)return;const show=input.type==='password';input.type=show?'text':'password';b.textContent=show?'⊘':'◉';b.setAttribute('aria-label',show?'Masquer le mot de passe':'Afficher le mot de passe');}));
+
+    $('#profileInfoForm')?.addEventListener('submit',async e=>{e.preventDefault();const st=$('#profileInfoStatus');st.textContent='Enregistrement…';st.classList.remove('error','success');try{const body={displayName:$('#profileDisplayName').value.trim(),email:$('#profileEmail').value.trim(),currentPassword:$('#profileCurrentPassword').value};const r=await api('/api/admin/profile',{method:'PATCH',body:JSON.stringify(body)});currentAdmin={...currentAdmin,...r.admin,displayName:r.admin?.displayName||body.displayName,email:r.admin?.email||body.email};$('#adminName').textContent=currentAdmin.displayName||'Administrateur';st.textContent='Profil mis à jour ✓';st.classList.add('success');$('#profileCurrentPassword').value='';}catch(err){st.textContent=err.message;st.classList.add('error');}});
+
+    $('#profilePasswordForm')?.addEventListener('submit',async e=>{e.preventDefault();const st=$('#profilePasswordStatus'),oldPassword=$('#oldPassword').value,newPassword=$('#newPassword').value,confirmPassword=$('#confirmPassword').value;st.classList.remove('error','success');if(newPassword!==confirmPassword){st.textContent='Les deux nouveaux mots de passe ne correspondent pas.';st.classList.add('error');return;}st.textContent='Modification…';try{await api('/api/admin/profile/password',{method:'PATCH',body:JSON.stringify({currentPassword:oldPassword,newPassword})});e.currentTarget.reset();st.textContent='Mot de passe modifié ✓';st.classList.add('success');}catch(err){st.textContent=err.message;st.classList.add('error');}});
+  }
+
   async function render(view=current){
     current=view; $$('.side-link').forEach(b=>b.classList.toggle('active',b.dataset.view===view)); setMeta(view);
     viewContent.innerHTML='<div class="loading-state"><span></span><p>Chargement des données…</p></div>';
@@ -224,6 +303,7 @@
     }
 
     if(view==='menu'){await renderMenu();return;}
+    if(view==='profile'){await renderProfile();return;}
 
     if(view==='events'){
       const rows=await api('/api/admin/events'); if(!rows.length){viewContent.innerHTML=empty('Aucun événement enregistré.');return;}
@@ -233,17 +313,23 @@
   }
 
   togglePassword.addEventListener('click',()=>{const show=passwordInput.type==='password';passwordInput.type=show?'text':'password';togglePassword.setAttribute('aria-pressed',String(show));togglePassword.setAttribute('aria-label',show?'Masquer le mot de passe':'Afficher le mot de passe');togglePassword.classList.toggle('is-visible',show);passwordInput.focus();});
-  loginForm.addEventListener('submit',async e=>{e.preventDefault();loginStatus.textContent='Connexion en cours…';loginStatus.classList.remove('error');loginSubmit.disabled=true;try{const data=Object.fromEntries(new FormData(e.currentTarget));const r=await api('/api/admin/login',{method:'POST',body:JSON.stringify(data)});$('#adminName').textContent=r.admin.displayName;showApp();loginStatus.textContent='';e.currentTarget.reset();passwordInput.type='password';await render('dashboard');}catch(err){loginStatus.textContent=err.message;loginStatus.classList.add('error');}finally{loginSubmit.disabled=false;}});
+  loginForm.addEventListener('submit',async e=>{e.preventDefault();loginStatus.textContent='Connexion en cours…';loginStatus.classList.remove('error');loginSubmit.disabled=true;try{const data=Object.fromEntries(new FormData(e.currentTarget));const r=await api('/api/admin/login',{method:'POST',body:JSON.stringify(data)});currentAdmin={displayName:r.admin.displayName||'Administrateur',email:r.admin.email||''};$('#adminName').textContent=currentAdmin.displayName;showApp();loginStatus.textContent='';e.currentTarget.reset();passwordInput.type='password';await render('dashboard');}catch(err){loginStatus.textContent=err.message;loginStatus.classList.add('error');}finally{loginSubmit.disabled=false;}});
   $$('.side-link').forEach(b=>b.addEventListener('click',()=>render(b.dataset.view).catch(e=>viewContent.innerHTML=`<p class="empty error-text">${esc(e.message)}</p>`)));
   $('#refreshBtn').addEventListener('click',()=>render(current).catch(e=>viewContent.innerHTML=`<p class="empty error-text">${esc(e.message)}</p>`));
+  $('#profileShortcut')?.addEventListener('click',()=>render('profile').catch(e=>viewContent.innerHTML=`<p class="empty error-text">${esc(e.message)}</p>`));
+  openProductModalBtn?.addEventListener('click',()=>openProductDialog());
+  $('#productModalClose')?.addEventListener('click',()=>closeModal(productModal));
+  $('#cancelProduct')?.addEventListener('click',()=>closeModal(productModal));
+  productImage?.addEventListener('change',()=>{const file=productImage.files?.[0];if(!file){productImagePreview.innerHTML='<span>Aucune photo sélectionnée</span>';return;}if(file.size>5*1024*1024){productImage.value='';productImagePreview.innerHTML='<span>Photo trop volumineuse (max. 5 Mo)</span>';return;}const url=URL.createObjectURL(file);productImagePreview.innerHTML=`<img src="${url}" alt="Aperçu du produit">`;});
+  productForm?.addEventListener('submit',async e=>{e.preventDefault();const status=$('#productFormStatus'),save=$('#saveProduct'),file=productImage.files?.[0];status.classList.remove('error','success');save.disabled=true;save.textContent='Ajout en cours…';try{status.textContent='Envoi de la photo…';const uploaded=await uploadProductImage(file);$('#productImageUrl').value=uploaded.url;status.textContent='Création du produit…';const name=$('#productName').value.trim();await api('/api/admin/menu',{method:'POST',body:JSON.stringify({categoryId:Number($('#productCategory').value),name,slug:slugify(name)+'-'+Date.now().toString(36),description:$('#productDescription').value.trim(),price:Number($('#productPrice').value),imagePath:uploaded.url,available:$('#productAvailable').checked,featured:false,badge:''})});status.textContent='Produit ajouté avec succès ✓';status.classList.add('success');await metrics();setTimeout(async()=>{closeModal(productModal);resetProductForm();if(current==='menu')await renderMenu();},650);}catch(err){status.textContent=err.message;status.classList.add('error');}finally{save.disabled=false;save.textContent='+ Ajouter le produit';}});
 
   $('#logoutBtn').addEventListener('click',()=>openModal(logoutModal)); $('#cancelLogout').addEventListener('click',()=>closeModal(logoutModal)); $('#logoutClose').addEventListener('click',()=>closeModal(logoutModal));
   $('#confirmLogout').addEventListener('click',async()=>{const b=$('#confirmLogout');b.disabled=true;b.textContent='Déconnexion…';try{await api('/api/admin/logout',{method:'POST',body:'{}'});}catch{}finally{b.disabled=false;b.textContent='Se déconnecter';closeModal(logoutModal);showLogin();}});
 
   $('#forgotCredentials').addEventListener('click',()=>openModal(credentialsModal)); $('#credentialsClose').addEventListener('click',()=>closeModal(credentialsModal)); $('#credentialsOk').addEventListener('click',()=>closeModal(credentialsModal));
   $('#orderDetailClose').addEventListener('click',()=>closeModal(orderDetailModal));
-  [logoutModal,credentialsModal,orderDetailModal].forEach(m=>m.addEventListener('click',e=>{if(e.target===m)closeModal(m);}));
-  document.addEventListener('keydown',e=>{if(e.key==='Escape'){[logoutModal,credentialsModal,orderDetailModal].forEach(closeModal);}});
+  [logoutModal,credentialsModal,orderDetailModal,productModal].filter(Boolean).forEach(m=>m.addEventListener('click',e=>{if(e.target===m)closeModal(m);}));
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'){[logoutModal,credentialsModal,orderDetailModal,productModal].filter(Boolean).forEach(closeModal);}});
 
   (async()=>{try{await metrics();showApp();await render('dashboard');}catch{showLogin();}})();
 })();

@@ -8,6 +8,7 @@ const rateLimit = require('express-rate-limit');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { randomUUID } = require('crypto');
+const { put, del } = require('@vercel/blob');
 const { query, getConnection, testConnection } = require('./db');
 
 const app = express();
@@ -382,6 +383,156 @@ app.post('/api/admin/logout', requireAdmin, async (req, res) => {
   await audit(req, 'auth.logout'); res.json({ ok:true });
 });
 
+
+// ======================================================
+// ADMIN — PROFIL
+// ======================================================
+app.get('/api/admin/profile', requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await query(
+      `SELECT id,email,display_name,last_login_at,created_at
+       FROM admins
+       WHERE id=? AND active=1
+       LIMIT 1`,
+      [req.admin.sub]
+    );
+
+    const admin = rows[0];
+    if (!admin) {
+      return res.status(404).json({ message: 'Administrateur introuvable.' });
+    }
+
+    res.json({
+      id: admin.id,
+      email: admin.email,
+      displayName: admin.display_name,
+      lastLoginAt: admin.last_login_at,
+      createdAt: admin.created_at
+    });
+  } catch (e) {
+    console.error('Profil admin:', e);
+    res.status(500).json({ message: 'Impossible de charger le profil.' });
+  }
+});
+
+app.patch('/api/admin/profile', requireAdmin, async (req, res) => {
+  try {
+    const displayName = cleanText(req.body?.displayName, 100);
+    const email = cleanText(req.body?.email, 180).toLowerCase();
+    const currentPassword = String(req.body?.currentPassword || '');
+
+    if (!displayName || !validEmail(email)) {
+      return res.status(400).json({ message: 'Le nom et une adresse email valide sont obligatoires.' });
+    }
+
+    const { rows } = await query(
+      `SELECT id,email,password_hash
+       FROM admins
+       WHERE id=? AND active=1
+       LIMIT 1`,
+      [req.admin.sub]
+    );
+
+    const admin = rows[0];
+    if (!admin) {
+      return res.status(404).json({ message: 'Administrateur introuvable.' });
+    }
+
+    if (email !== String(admin.email).toLowerCase()) {
+      if (!currentPassword) {
+        return res.status(400).json({
+          message: 'Saisissez votre mot de passe actuel pour changer l’adresse email.'
+        });
+      }
+
+      const ok = await bcrypt.compare(currentPassword, admin.password_hash);
+      if (!ok) {
+        return res.status(401).json({ message: 'Mot de passe actuel incorrect.' });
+      }
+
+      const duplicate = await query(
+        'SELECT id FROM admins WHERE email=? AND id<>? LIMIT 1',
+        [email, req.admin.sub]
+      );
+      if (duplicate.rows.length) {
+        return res.status(409).json({ message: 'Cette adresse email est déjà utilisée.' });
+      }
+    }
+
+    await query(
+      `UPDATE admins
+       SET display_name=?,email=?,updated_at=NOW()
+       WHERE id=?`,
+      [displayName, email, req.admin.sub]
+    );
+
+    await audit(req, 'profile.update', 'admin', req.admin.sub);
+
+    const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+    const token = signAdmin({ id: req.admin.sub, email });
+    res.setHeader(
+      'Set-Cookie',
+      `sammollo_admin=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800${secure}`
+    );
+
+    res.json({
+      ok: true,
+      admin: { email, displayName }
+    });
+  } catch (e) {
+    console.error('Modification profil admin:', e);
+    res.status(500).json({ message: 'Impossible de modifier le profil.' });
+  }
+});
+
+app.patch('/api/admin/profile/password', requireAdmin, async (req, res) => {
+  try {
+    const currentPassword = String(req.body?.currentPassword || '');
+    const newPassword = String(req.body?.newPassword || '');
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ message: 'Tous les champs sont obligatoires.' });
+    }
+    if (newPassword.length < 12) {
+      return res.status(400).json({ message: 'Le nouveau mot de passe doit contenir au moins 12 caractères.' });
+    }
+
+    const { rows } = await query(
+      `SELECT password_hash
+       FROM admins
+       WHERE id=? AND active=1
+       LIMIT 1`,
+      [req.admin.sub]
+    );
+
+    const admin = rows[0];
+    if (!admin) {
+      return res.status(404).json({ message: 'Administrateur introuvable.' });
+    }
+
+    const ok = await bcrypt.compare(currentPassword, admin.password_hash);
+    if (!ok) {
+      return res.status(401).json({ message: 'Mot de passe actuel incorrect.' });
+    }
+
+    if (await bcrypt.compare(newPassword, admin.password_hash)) {
+      return res.status(400).json({ message: 'Le nouveau mot de passe doit être différent de l’ancien.' });
+    }
+
+    const newHash = await bcrypt.hash(newPassword, 12);
+    await query(
+      `UPDATE admins SET password_hash=?,updated_at=NOW() WHERE id=?`,
+      [newHash, req.admin.sub]
+    );
+
+    await audit(req, 'profile.password.change', 'admin', req.admin.sub);
+    res.json({ ok: true, message: 'Mot de passe modifié avec succès.' });
+  } catch (e) {
+    console.error('Modification mot de passe admin:', e);
+    res.status(500).json({ message: 'Impossible de modifier le mot de passe.' });
+  }
+});
+
 app.get('/api/admin/dashboard', requireAdmin, async (_req, res) => {
   const [messages, pendingOrders, todayOrders, revenue, items, paidPayments, confirmedOrders] = await Promise.all([
     query("SELECT COUNT(*) AS count FROM contact_messages WHERE status='new'"),
@@ -474,6 +625,79 @@ app.get('/api/admin/payments', requireAdmin, async (_req, res) => {
   res.json(rows);
 });
 
+
+// ======================================================
+// ADMIN — UPLOAD PHOTO PRODUIT (VERCEL BLOB)
+// ======================================================
+const PRODUCT_IMAGE_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp'
+]);
+
+app.post(
+  '/api/admin/uploads/product-image',
+  requireAdmin,
+  express.raw({
+    type: ['image/jpeg', 'image/png', 'image/webp'],
+    limit: '4mb'
+  }),
+  async (req, res) => {
+    try {
+      const contentType = String(req.headers['content-type'] || '')
+        .split(';')[0]
+        .trim()
+        .toLowerCase();
+
+      if (!PRODUCT_IMAGE_TYPES.has(contentType)) {
+        return res.status(415).json({
+          message: 'Format non autorisé. Utilisez JPG, PNG ou WebP.'
+        });
+      }
+
+      if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+        return res.status(400).json({ message: 'Aucune image reçue.' });
+      }
+
+      const originalName = String(req.headers['x-file-name'] || 'produit').slice(0, 120);
+      const cleanName = originalName
+        .replace(/\.[^/.]+$/, '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9_-]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .toLowerCase() || 'produit';
+
+      const extensionByType = {
+        'image/jpeg': 'jpg',
+        'image/png': 'png',
+        'image/webp': 'webp'
+      };
+
+      const blob = await put(
+        `menu/${cleanName}.${extensionByType[contentType]}`,
+        req.body,
+        {
+          access: 'public',
+          contentType,
+          addRandomSuffix: true
+        }
+      );
+
+      await audit(req, 'menu.image.upload', 'blob', blob.pathname);
+
+      res.status(201).json({
+        ok: true,
+        url: blob.url,
+        pathname: blob.pathname
+      });
+    } catch (e) {
+      console.error('Erreur upload image produit:', e);
+      res.status(500).json({ message: "Impossible d'envoyer l'image pour le moment." });
+    }
+  }
+);
+
 app.patch('/api/admin/menu/:id', requireAdmin, async (req, res) => {
   const name=cleanText(req.body?.name,120), description=cleanText(req.body?.description,2000), price=Number(req.body?.price);
   const available=req.body?.available?1:0, featured=req.body?.featured?1:0, badge=cleanText(req.body?.badge,40)||null;
@@ -491,7 +715,22 @@ app.post('/api/admin/menu', requireAdmin, async (req,res)=>{
   try { const r=await query(`INSERT INTO menu_items(category_id,name,slug,description,price,image_path,available,featured,badge) VALUES(?,?,?,?,?,?,?,?,?)`,[categoryId,name,slug,description,price,imagePath,req.body?.available!==false?1:0,req.body?.featured?1:0,badge]); const {rows}=await query('SELECT * FROM menu_items WHERE id=?',[r.insertId]); await audit(req,'menu.create','menu_item',r.insertId); res.status(201).json(rows[0]); }
   catch(e){ if(e.code==='ER_DUP_ENTRY') return res.status(409).json({message:'Ce slug existe déjà.'}); console.error(e); res.status(500).json({message:'Création impossible.'}); }
 });
-app.delete('/api/admin/menu/:id', requireAdmin, async (req,res)=>{ const r=await query('DELETE FROM menu_items WHERE id=?',[req.params.id]); if(!r.rowCount)return res.status(404).json({message:'Produit introuvable.'}); await audit(req,'menu.delete','menu_item',req.params.id); res.json({ok:true}); });
+app.delete('/api/admin/menu/:id', requireAdmin, async (req, res) => {
+  const { rows } = await query('SELECT image_path FROM menu_items WHERE id=? LIMIT 1', [req.params.id]);
+  const item = rows[0];
+  if (!item) return res.status(404).json({ message: 'Produit introuvable.' });
+
+  const r = await query('DELETE FROM menu_items WHERE id=?', [req.params.id]);
+  if (!r.rowCount) return res.status(404).json({ message: 'Produit introuvable.' });
+
+  if (item.image_path && /^https:\/\/.*\.blob\.vercel-storage\.com\//i.test(item.image_path)) {
+    try { await del(item.image_path); }
+    catch (e) { console.error('Suppression Blob produit:', e.message); }
+  }
+
+  await audit(req, 'menu.delete', 'menu_item', req.params.id);
+  res.json({ ok: true });
+});
 app.get('/api/admin/categories', requireAdmin, async (_req,res)=>{ const {rows}=await query('SELECT id,name,slug,sort_order,active FROM categories ORDER BY sort_order,id'); res.json(rows); });
 app.get('/api/admin/events', requireAdmin, async (_req,res)=>{ const {rows}=await query('SELECT * FROM events ORDER BY sort_order,created_at DESC'); res.json(rows); });
 
@@ -513,10 +752,25 @@ app.use('/api', (_req,res)=>res.status(404).json({message:'Endpoint introuvable.
 async function bootstrap(){
   try {
     const dbInfo=await testConnection(); console.log(`[MySQL] connecté à ${dbInfo.db_name}`);
-    if(process.env.ADMIN_EMAIL&&process.env.ADMIN_PASSWORD){
-      const hash=await bcrypt.hash(process.env.ADMIN_PASSWORD,12);
-      await query(`INSERT INTO admins(email,password_hash,display_name,active) VALUES(?,?,?,1)
-        ON DUPLICATE KEY UPDATE password_hash=VALUES(password_hash),display_name=VALUES(display_name),active=1,updated_at=NOW()`,[process.env.ADMIN_EMAIL.toLowerCase(),hash,process.env.ADMIN_NAME||'Administration Sammollo']);
+    if (process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD) {
+      const initialEmail = String(process.env.ADMIN_EMAIL).trim().toLowerCase();
+      const existingAdmins = await query('SELECT id FROM admins LIMIT 1');
+
+      // Les variables Vercel créent uniquement le premier compte.
+      // Ensuite, le profil et le mot de passe sont gérés depuis le back-office.
+      if (existingAdmins.rows.length === 0) {
+        const hash = await bcrypt.hash(process.env.ADMIN_PASSWORD, 12);
+        await query(
+          `INSERT INTO admins(email,password_hash,display_name,active)
+           VALUES(?,?,?,1)`,
+          [
+            initialEmail,
+            hash,
+            process.env.ADMIN_NAME || 'Administration Sammollo'
+          ]
+        );
+        console.log('[Admin] compte initial créé.');
+      }
     }
     app.listen(PORT,()=>console.log(`Sammollo Restaurant : http://localhost:${PORT}`));
   } catch(err){ console.error('[Démarrage] impossible de lancer le serveur :',err.message); console.error('Vérifiez DB_HOST, DB_PORT, DB_USER, DB_PASSWORD et DB_NAME dans .env, puis importez database/database.sql dans phpMyAdmin.'); process.exit(1); }

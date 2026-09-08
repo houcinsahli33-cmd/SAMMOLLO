@@ -5,33 +5,63 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow,noarchive,nosnippet">
   <title>SAMMOLLO | Administration</title>
+  <link rel="icon" type="image/png" href="/image/logorestaurant.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/assets/css/admin.css">
 </head>
 <body>
+
   <section id="loginPanel" class="auth-screen" aria-labelledby="loginTitle">
-    <div class="auth-glow auth-glow-one"></div><div class="auth-glow auth-glow-two"></div>
+    <div class="auth-glow auth-glow-one"></div>
+    <div class="auth-glow auth-glow-two"></div>
     <a class="auth-back" href="/index.html">← Retour au site</a>
+
     <div class="auth-card">
-      <div class="auth-brand"><img src="/image/logorestaurant.png" alt="Logo SAMMOLLO"><div><strong>SAMMOLLO</strong><span>ESPACE ADMINISTRATION</span></div></div>
-      <div class="auth-copy"><p class="kicker">ACCÈS PRIVÉ</p><h1 id="loginTitle">Bienvenue dans le back-office</h1><p>Connectez-vous pour gérer les commandes, paiements, messages, produits et événements.</p></div>
+      <div class="auth-brand">
+        <img src="/image/logorestaurant.png" alt="Logo SAMMOLLO">
+        <div><strong>SAMMOLLO</strong><span>ESPACE ADMINISTRATION</span></div>
+      </div>
+
+      <div class="auth-copy">
+        <p class="kicker">ACCÈS PRIVÉ</p>
+        <h1 id="loginTitle">Bienvenue dans le back-office</h1>
+        <p>Connectez-vous pour gérer les commandes, paiements, messages, produits et événements.</p>
+      </div>
+
       <form id="loginForm" class="auth-form" novalidate>
         <label class="field-label" for="adminEmail">Adresse email</label>
-        <div class="field-control"><span class="field-icon" aria-hidden="true">@</span><input id="adminEmail" name="email" type="email" autocomplete="username" placeholder="Adresse administrateur" required></div>
-        <div class="field-label-row"><label class="field-label" for="adminPassword">Mot de passe</label><button id="forgotCredentials" class="text-button" type="button">Identifiants oubliés ?</button></div>
-        <div class="field-control password-control"><span class="field-icon lock-icon" aria-hidden="true">●</span><input id="adminPassword" name="password" type="password" autocomplete="current-password" placeholder="Votre mot de passe" required><button id="togglePassword" class="password-toggle" type="button" aria-label="Afficher le mot de passe" aria-pressed="false"><span aria-hidden="true">◉</span></button></div>
+        <div class="field-control">
+          <span class="field-icon" aria-hidden="true">@</span>
+          <input id="adminEmail" name="email" type="email" autocomplete="username" placeholder="Adresse administrateur" required>
+        </div>
+
+        <div class="field-label-row">
+          <label class="field-label" for="adminPassword">Mot de passe</label>
+          <button id="forgotCredentials" class="text-button" type="button">Identifiants oubliés ?</button>
+        </div>
+
+        <div class="field-control password-control">
+          <span class="field-icon lock-icon" aria-hidden="true">●</span>
+          <input id="adminPassword" name="password" type="password" autocomplete="current-password" placeholder="Votre mot de passe" required>
+          <button id="togglePassword" class="password-toggle" type="button" aria-label="Afficher le mot de passe" aria-pressed="false"><span aria-hidden="true">◉</span></button>
+        </div>
+
         <button id="loginSubmit" class="admin-btn auth-submit" type="submit"><span>Se connecter</span><span aria-hidden="true">→</span></button>
         <p class="form-message" id="loginStatus" role="status" aria-live="polite"></p>
       </form>
+
       <div class="auth-security"><span class="security-dot"></span><span>Accès protégé · Session administrateur sécurisée</span></div>
     </div>
   </section>
 
   <div id="appPanel" class="admin-shell" hidden>
     <aside class="admin-side">
-      <div class="admin-brand"><img src="/image/logorestaurant.png" alt="Logo SAMMOLLO"><div><strong>SAMMOLLO</strong><small>BACK-OFFICE</small></div></div>
+      <div class="admin-brand">
+        <img src="/image/logorestaurant.png" alt="Logo SAMMOLLO">
+        <div><strong>SAMMOLLO</strong><small>BACK-OFFICE</small></div>
+      </div>
 
       <div class="side-group">
         <div class="side-section-label">GESTION</div>
@@ -46,20 +76,38 @@
       <div class="side-group side-group-content">
         <div class="side-section-label">CONTENU</div>
         <nav aria-label="Contenu administration">
-          <button class="side-link" data-view="menu" type="button"><span class="nav-mark">05</span><span>Carte & produits</span></button>
+          <button class="side-link" data-view="menu" type="button"><span class="nav-mark">05</span><span>Carte &amp; produits</span></button>
           <button class="side-link" data-view="events" type="button"><span class="nav-mark">06</span><span>Événements</span></button>
         </nav>
       </div>
 
-      <div class="side-bottom"><a href="/index.html"><span>←</span><span>Voir le site</span></a><button id="logoutBtn" class="logout-link" type="button"><span>↪</span><span>Déconnexion</span></button></div>
+      <div class="side-group side-group-account">
+        <div class="side-section-label">COMPTE</div>
+        <nav aria-label="Compte administrateur">
+          <button class="side-link" data-view="profile" type="button"><span class="nav-mark">07</span><span>Profil</span></button>
+        </nav>
+      </div>
+
+      <div class="side-bottom">
+        <a href="/index.html"><span>←</span><span>Voir le site</span></a>
+        <button id="logoutBtn" class="logout-link" type="button"><span>↪</span><span>Déconnexion</span></button>
+      </div>
     </aside>
 
     <main class="admin-main">
       <header class="admin-top">
-        <div class="admin-heading"><p class="kicker">SAMMOLLO · ADMINISTRATION</p><h1 id="viewTitle">Tableau de bord</h1><p class="top-subtitle" id="viewSubtitle">Vue générale de l'activité du restaurant.</p></div>
+        <div class="admin-heading">
+          <p class="kicker">SAMMOLLO · ADMINISTRATION</p>
+          <h1 id="viewTitle">Tableau de bord</h1>
+          <p class="top-subtitle" id="viewSubtitle">Vue générale de l'activité du restaurant.</p>
+        </div>
+
         <div class="top-actions">
           <div class="top-clock" aria-label="Date actuelle"><span id="adminDate">—</span><small id="adminTime">—</small></div>
-          <div class="admin-profile"><div class="admin-avatar">S</div><div class="admin-profile-copy"><span class="admin-profile-status"><i></i> Connecté</span><strong id="adminName">Administrateur</strong></div></div>
+          <button id="profileShortcut" class="admin-profile" type="button" aria-label="Ouvrir mon profil">
+            <div class="admin-avatar">S</div>
+            <div class="admin-profile-copy"><span class="admin-profile-status"><i></i> Connecté</span><strong id="adminName">Administrateur</strong></div>
+          </button>
         </div>
       </header>
 
@@ -71,17 +119,102 @@
       </section>
 
       <section class="admin-card" id="contentCard">
-        <div class="card-head"><div><p class="kicker" id="contentKicker">ACTIVITÉ</p><h2 id="contentTitle">Vue d’ensemble</h2></div><button class="secondary-btn refresh-btn" id="refreshBtn" type="button"><span aria-hidden="true">↻</span> Actualiser</button></div>
+        <div class="card-head">
+          <div><p class="kicker" id="contentKicker">ACTIVITÉ</p><h2 id="contentTitle">Vue d’ensemble</h2></div>
+          <div class="card-head-actions">
+            <button id="openProductModal" class="admin-btn product-add-btn" type="button" hidden>+ Ajouter un produit</button>
+            <button class="secondary-btn refresh-btn" id="refreshBtn" type="button"><span aria-hidden="true">↻</span> Actualiser</button>
+          </div>
+        </div>
         <div id="viewContent" class="table-wrap"><p class="empty">Chargement…</p></div>
       </section>
     </main>
   </div>
 
-  <div id="logoutModal" class="dialog-backdrop" hidden><section class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="logoutTitle"><button id="logoutClose" class="dialog-close" type="button" aria-label="Fermer">×</button><div class="dialog-icon" aria-hidden="true">↪</div><p class="kicker">CONFIRMATION</p><h2 id="logoutTitle">Se déconnecter ?</h2><p>Votre session d’administration sera fermée. Vous devrez saisir vos identifiants pour revenir.</p><div class="dialog-actions"><button id="cancelLogout" class="secondary-btn" type="button">Annuler</button><button id="confirmLogout" class="danger-btn" type="button">Se déconnecter</button></div></section></div>
+  <div id="logoutModal" class="dialog-backdrop" hidden>
+    <section class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="logoutTitle">
+      <button id="logoutClose" class="dialog-close" type="button" aria-label="Fermer">×</button>
+      <div class="dialog-icon" aria-hidden="true">↪</div>
+      <p class="kicker">CONFIRMATION</p>
+      <h2 id="logoutTitle">Se déconnecter ?</h2>
+      <p>Votre session d’administration sera fermée. Vous devrez saisir vos identifiants pour revenir.</p>
+      <div class="dialog-actions"><button id="cancelLogout" class="secondary-btn" type="button">Annuler</button><button id="confirmLogout" class="danger-btn" type="button">Se déconnecter</button></div>
+    </section>
+  </div>
 
-  <div id="credentialsModal" class="dialog-backdrop" hidden><section class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="credentialsTitle"><button id="credentialsClose" class="dialog-close" type="button" aria-label="Fermer">×</button><div class="dialog-icon neutral" aria-hidden="true">?</div><p class="kicker">ACCÈS ADMIN</p><h2 id="credentialsTitle">Identifiants oubliés ?</h2><p>Pour ce projet, l’adresse et le mot de passe administrateur sont gérés dans Vercel avec <strong>ADMIN_EMAIL</strong> et <strong>ADMIN_PASSWORD</strong>. Modifiez-les puis redéployez le projet.</p><div class="dialog-actions one"><button id="credentialsOk" class="secondary-btn" type="button">J’ai compris</button></div></section></div>
+  <div id="credentialsModal" class="dialog-backdrop" hidden>
+    <section class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="credentialsTitle">
+      <button id="credentialsClose" class="dialog-close" type="button" aria-label="Fermer">×</button>
+      <div class="dialog-icon neutral" aria-hidden="true">?</div>
+      <p class="kicker">ACCÈS ADMIN</p>
+      <h2 id="credentialsTitle">Identifiants oubliés ?</h2>
+      <p>Les identifiants initiaux sont configurés côté serveur. Une fois connecté, vous pourrez gérer votre nom, votre email et votre mot de passe depuis la rubrique Profil.</p>
+      <div class="dialog-actions one"><button id="credentialsOk" class="secondary-btn" type="button">J’ai compris</button></div>
+    </section>
+  </div>
 
-  <div id="orderDetailModal" class="dialog-backdrop" hidden><section class="dialog-card order-dialog" role="dialog" aria-modal="true" aria-labelledby="orderDetailTitle"><button id="orderDetailClose" class="dialog-close" type="button" aria-label="Fermer">×</button><p class="kicker">COMMANDE</p><h2 id="orderDetailTitle">Détails de la commande</h2><div id="orderDetailBody" class="order-detail-body"><p class="empty">Chargement…</p></div></section></div>
+  <div id="orderDetailModal" class="dialog-backdrop" hidden>
+    <section class="dialog-card order-dialog" role="dialog" aria-modal="true" aria-labelledby="orderDetailTitle">
+      <button id="orderDetailClose" class="dialog-close" type="button" aria-label="Fermer">×</button>
+      <p class="kicker">COMMANDE</p>
+      <h2 id="orderDetailTitle">Détails de la commande</h2>
+      <div id="orderDetailBody" class="order-detail-body"><p class="empty">Chargement…</p></div>
+    </section>
+  </div>
+
+  <div id="productModal" class="dialog-backdrop" hidden>
+    <section class="dialog-card product-dialog" role="dialog" aria-modal="true" aria-labelledby="productModalTitle">
+      <button id="productModalClose" class="dialog-close" type="button" aria-label="Fermer">×</button>
+      <p class="kicker">CARTE SAMMOLLO</p>
+      <h2 id="productModalTitle">Ajouter un produit</h2>
+      <p class="dialog-description">Ajoutez un nouveau produit à la carte du restaurant.</p>
+
+      <form id="productForm" class="product-form">
+        <div class="product-form-grid">
+          <div class="product-field">
+            <label for="productCategory">Catégorie *</label>
+            <select id="productCategory" required><option value="">Sélectionner une catégorie</option></select>
+          </div>
+
+          <div class="product-field">
+            <label for="productName">Nom du produit *</label>
+            <input id="productName" type="text" maxlength="120" placeholder="Ex. Pizza 4 Fromages" required>
+          </div>
+
+          <div class="product-field product-field-full">
+            <label for="productDescription">Description</label>
+            <textarea id="productDescription" rows="4" maxlength="2000" placeholder="Mozzarella, fromage, sauce tomate..."></textarea>
+          </div>
+
+          <div class="product-field">
+            <label for="productPrice">Prix (DA) *</label>
+            <input id="productPrice" type="number" min="0" step="1" placeholder="1400" required>
+          </div>
+
+          <div class="product-field">
+            <label class="product-availability"><input id="productAvailable" type="checkbox" checked><span>Produit disponible</span></label>
+          </div>
+
+          <div class="product-field product-field-full">
+            <label for="productImage">Photo du produit *</label>
+            <div class="product-upload-box">
+              <input id="productImage" type="file" accept="image/jpeg,image/png,image/webp" required>
+              <div id="productImagePreview" class="product-image-preview"><span>Aucune photo sélectionnée</span></div>
+              <small>JPG, PNG ou WebP · maximum 5 Mo</small>
+            </div>
+          </div>
+        </div>
+
+        <input id="productImageUrl" type="hidden">
+        <p id="productFormStatus" class="form-message" role="status" aria-live="polite"></p>
+
+        <div class="dialog-actions product-actions">
+          <button id="cancelProduct" class="secondary-btn" type="button">Annuler</button>
+          <button id="saveProduct" class="admin-btn" type="submit">+ Ajouter le produit</button>
+        </div>
+      </form>
+    </section>
+  </div>
 
   <script src="/assets/js/admin.js"></script>
 </body>
