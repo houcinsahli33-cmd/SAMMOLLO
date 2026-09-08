@@ -683,3 +683,6 @@
     line-height:1.6 !important;
   }
 }
+
+/* Paiement en ligne */
+.payment-help{margin:-4px 0 12px;color:#777;font-size:11px;line-height:1.55}.payment-notice{margin:22px auto 0;width:min(1180px,calc(100% - 40px));padding:15px 18px;border-radius:10px;font-size:12px;font-weight:650}.payment-notice.success{display:block;background:#edf7ef;border:1px solid #cde7d2;color:#2f6a3b}.payment-notice.error{display:block;background:#fff0ee;border:1px solid #f0d0cb;color:#8c433c}.payment-notice.pending{display:block;background:#fff8e9;border:1px solid #ead9ad;color:#755d20}

@@ -11,130 +11,64 @@
   <link rel="stylesheet" href="/assets/css/admin.css">
 </head>
 <body>
-  <!-- Connexion : c'est le SEUL écran visible tant que l'admin n'est pas authentifié. -->
   <section id="loginPanel" class="auth-screen" aria-labelledby="loginTitle">
-    <div class="auth-glow auth-glow-one"></div>
-    <div class="auth-glow auth-glow-two"></div>
-
-    <a class="auth-back" href="/index.html" aria-label="Retourner au site SAMMOLLO">← Retour au site</a>
-
+    <div class="auth-glow auth-glow-one"></div><div class="auth-glow auth-glow-two"></div>
+    <a class="auth-back" href="/index.html">← Retour au site</a>
     <div class="auth-card">
-      <div class="auth-brand">
-        <img src="/image/logorestaurant.png" alt="Logo SAMMOLLO">
-        <div>
-          <strong>SAMMOLLO</strong>
-          <span>ESPACE ADMINISTRATION</span>
-        </div>
-      </div>
-
-      <div class="auth-copy">
-        <p class="kicker">ACCÈS PRIVÉ</p>
-        <h1 id="loginTitle">Bienvenue dans le back-office</h1>
-        <p>Connectez-vous pour gérer les commandes, les messages, la carte et les événements.</p>
-      </div>
-
+      <div class="auth-brand"><img src="/image/logorestaurant.png" alt="Logo SAMMOLLO"><div><strong>SAMMOLLO</strong><span>ESPACE ADMINISTRATION</span></div></div>
+      <div class="auth-copy"><p class="kicker">ACCÈS PRIVÉ</p><h1 id="loginTitle">Bienvenue dans le back-office</h1><p>Connectez-vous pour gérer les commandes, paiements, messages, produits et événements.</p></div>
       <form id="loginForm" class="auth-form" novalidate>
         <label class="field-label" for="adminEmail">Adresse email</label>
-        <div class="field-control">
-          <span class="field-icon" aria-hidden="true">@</span>
-          <input id="adminEmail" name="email" type="email" autocomplete="username" placeholder="admin@sammollo..." required>
-        </div>
-
-        <div class="field-label-row">
-          <label class="field-label" for="adminPassword">Mot de passe</label>
-        </div>
-        <div class="field-control password-control">
-          <span class="field-icon lock-icon" aria-hidden="true">●</span>
-          <input id="adminPassword" name="password" type="password" autocomplete="current-password" placeholder="Votre mot de passe" required>
-          <button id="togglePassword" class="password-toggle" type="button" aria-label="Afficher le mot de passe" aria-pressed="false">
-            <span class="eye-open" aria-hidden="true">◉</span>
-          </button>
-        </div>
-
-        <button id="loginSubmit" class="admin-btn auth-submit" type="submit">
-          <span>Se connecter</span>
-          <span aria-hidden="true">→</span>
-        </button>
+        <div class="field-control"><span class="field-icon" aria-hidden="true">@</span><input id="adminEmail" name="email" type="email" autocomplete="username" placeholder="Adresse administrateur" required></div>
+        <div class="field-label-row"><label class="field-label" for="adminPassword">Mot de passe</label><button id="forgotCredentials" class="text-button" type="button">Identifiants oubliés ?</button></div>
+        <div class="field-control password-control"><span class="field-icon lock-icon" aria-hidden="true">●</span><input id="adminPassword" name="password" type="password" autocomplete="current-password" placeholder="Votre mot de passe" required><button id="togglePassword" class="password-toggle" type="button" aria-label="Afficher le mot de passe" aria-pressed="false"><span aria-hidden="true">◉</span></button></div>
+        <button id="loginSubmit" class="admin-btn auth-submit" type="submit"><span>Se connecter</span><span aria-hidden="true">→</span></button>
         <p class="form-message" id="loginStatus" role="status" aria-live="polite"></p>
       </form>
-
-      <div class="auth-security">
-        <span class="security-dot"></span>
-        <span>Accès protégé · Session administrateur sécurisée</span>
-      </div>
+      <div class="auth-security"><span class="security-dot"></span><span>Accès protégé · Session administrateur sécurisée</span></div>
     </div>
   </section>
 
-  <!-- Application : totalement masquée avant authentification. -->
   <div id="appPanel" class="admin-shell" hidden>
     <aside class="admin-side">
-      <div class="admin-brand">
-        <img src="/image/logorestaurant.png" alt="Logo SAMMOLLO">
-        <div><strong>SAMMOLLO</strong><small>BACK-OFFICE</small></div>
-      </div>
-
+      <div class="admin-brand"><img src="/image/logorestaurant.png" alt="Logo SAMMOLLO"><div><strong>SAMMOLLO</strong><small>BACK-OFFICE</small></div></div>
       <div class="side-section-label">GESTION</div>
       <nav aria-label="Navigation administration">
         <button class="side-link active" data-view="dashboard" type="button"><span class="nav-mark">01</span><span>Tableau de bord</span></button>
-        <button class="side-link" data-view="orders" type="button"><span class="nav-mark">02</span><span>Commandes</span></button>
-        <button class="side-link" data-view="messages" type="button"><span class="nav-mark">03</span><span>Messages</span></button>
-        <button class="side-link" data-view="menu" type="button"><span class="nav-mark">04</span><span>Carte & produits</span></button>
-        <button class="side-link" data-view="events" type="button"><span class="nav-mark">05</span><span>Événements</span></button>
+        <button class="side-link" data-view="orders" type="button"><span class="nav-mark">02</span><span>Commandes</span><b id="pendingOrderDot" class="nav-badge" hidden>0</b></button>
+        <button class="side-link" data-view="payments" type="button"><span class="nav-mark">03</span><span>Paiements</span></button>
+        <button class="side-link" data-view="messages" type="button"><span class="nav-mark">04</span><span>Messages</span><b id="newMessageDot" class="nav-badge" hidden>0</b></button>
+        <button class="side-link" data-view="menu" type="button"><span class="nav-mark">05</span><span>Carte & produits</span></button>
+        <button class="side-link" data-view="events" type="button"><span class="nav-mark">06</span><span>Événements</span></button>
       </nav>
-
-      <div class="side-bottom">
-        <a href="/index.html"><span>←</span><span>Voir le site</span></a>
-        <button id="logoutBtn" class="logout-link" type="button"><span>↪</span><span>Déconnexion</span></button>
-      </div>
+      <div class="side-bottom"><a href="/index.html"><span>←</span><span>Voir le site</span></a><button id="logoutBtn" class="logout-link" type="button"><span>↪</span><span>Déconnexion</span></button></div>
     </aside>
 
     <main class="admin-main">
       <header class="admin-top">
-        <div>
-          <p class="kicker">SAMMOLLO · ADMINISTRATION</p>
-          <h1 id="viewTitle">Tableau de bord</h1>
-          <p class="top-subtitle" id="viewSubtitle">Vue générale de l'activité du restaurant.</p>
-        </div>
-        <div class="admin-profile">
-          <div class="admin-avatar">S</div>
-          <div class="admin-profile-copy">
-            <span class="admin-profile-status"><i></i> Connecté</span>
-            <strong id="adminName">Administrateur</strong>
-          </div>
-        </div>
+        <div><p class="kicker">SAMMOLLO · ADMINISTRATION</p><h1 id="viewTitle">Tableau de bord</h1><p class="top-subtitle" id="viewSubtitle">Vue générale de l'activité du restaurant.</p></div>
+        <div class="admin-profile"><div class="admin-avatar">S</div><div class="admin-profile-copy"><span class="admin-profile-status"><i></i> Connecté</span><strong id="adminName">Administrateur</strong></div></div>
       </header>
 
       <section class="metrics" aria-label="Indicateurs">
         <article><span class="metric-index">01</span><p>Nouveaux messages</p><strong id="metricMessages">—</strong><small>À consulter</small></article>
-        <article><span class="metric-index">02</span><p>Commandes aujourd’hui</p><strong id="metricOrders">—</strong><small>Aujourd’hui</small></article>
+        <article><span class="metric-index">02</span><p>Commandes en attente</p><strong id="metricOrders">—</strong><small>À confirmer</small></article>
         <article><span class="metric-index">03</span><p>CA payé aujourd’hui</p><strong id="metricRevenue">—</strong><small>Dinars algériens</small></article>
         <article><span class="metric-index">04</span><p>Produits disponibles</p><strong id="metricItems">—</strong><small>Sur la carte</small></article>
       </section>
 
       <section class="admin-card" id="contentCard">
-        <div class="card-head">
-          <div><p class="kicker" id="contentKicker">ACTIVITÉ</p><h2 id="contentTitle">Vue d’ensemble</h2></div>
-          <button class="secondary-btn" id="refreshBtn" type="button">↻ Actualiser</button>
-        </div>
+        <div class="card-head"><div><p class="kicker" id="contentKicker">ACTIVITÉ</p><h2 id="contentTitle">Vue d’ensemble</h2></div><button class="secondary-btn" id="refreshBtn" type="button">↻ Actualiser</button></div>
         <div id="viewContent" class="table-wrap"><p class="empty">Chargement…</p></div>
       </section>
     </main>
   </div>
 
-  <!-- Dialogue de déconnexion -->
-  <div id="logoutModal" class="dialog-backdrop" hidden>
-    <section class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="logoutTitle" aria-describedby="logoutText">
-      <button id="logoutClose" class="dialog-close" type="button" aria-label="Fermer">×</button>
-      <div class="dialog-icon" aria-hidden="true">↪</div>
-      <p class="kicker">CONFIRMATION</p>
-      <h2 id="logoutTitle">Se déconnecter ?</h2>
-      <p id="logoutText">Votre session d’administration sera fermée. Vous devrez saisir vos identifiants pour revenir.</p>
-      <div class="dialog-actions">
-        <button id="cancelLogout" class="secondary-btn" type="button">Annuler</button>
-        <button id="confirmLogout" class="danger-btn" type="button">Se déconnecter</button>
-      </div>
-    </section>
-  </div>
+  <div id="logoutModal" class="dialog-backdrop" hidden><section class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="logoutTitle"><button id="logoutClose" class="dialog-close" type="button" aria-label="Fermer">×</button><div class="dialog-icon" aria-hidden="true">↪</div><p class="kicker">CONFIRMATION</p><h2 id="logoutTitle">Se déconnecter ?</h2><p>Votre session d’administration sera fermée. Vous devrez saisir vos identifiants pour revenir.</p><div class="dialog-actions"><button id="cancelLogout" class="secondary-btn" type="button">Annuler</button><button id="confirmLogout" class="danger-btn" type="button">Se déconnecter</button></div></section></div>
+
+  <div id="credentialsModal" class="dialog-backdrop" hidden><section class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="credentialsTitle"><button id="credentialsClose" class="dialog-close" type="button" aria-label="Fermer">×</button><div class="dialog-icon neutral" aria-hidden="true">?</div><p class="kicker">ACCÈS ADMIN</p><h2 id="credentialsTitle">Identifiants oubliés ?</h2><p>Pour ce projet, l’adresse et le mot de passe administrateur sont gérés dans Vercel avec <strong>ADMIN_EMAIL</strong> et <strong>ADMIN_PASSWORD</strong>. Modifiez-les puis redéployez le projet.</p><div class="dialog-actions one"><button id="credentialsOk" class="secondary-btn" type="button">J’ai compris</button></div></section></div>
+
+  <div id="orderDetailModal" class="dialog-backdrop" hidden><section class="dialog-card order-dialog" role="dialog" aria-modal="true" aria-labelledby="orderDetailTitle"><button id="orderDetailClose" class="dialog-close" type="button" aria-label="Fermer">×</button><p class="kicker">COMMANDE</p><h2 id="orderDetailTitle">Détails de la commande</h2><div id="orderDetailBody" class="order-detail-body"><p class="empty">Chargement…</p></div></section></div>
 
   <script src="/assets/js/admin.js"></script>
 </body>

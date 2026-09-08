@@ -16,7 +16,12 @@ const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(48).toString('he
 
 app.set('trust proxy', 1);
 app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
-app.use(express.json({ limit: '25kb' }));
+app.use(express.json({
+  limit: '25kb',
+  verify: (req, _res, buf) => {
+    if (req.originalUrl === '/api/payments/chargily/webhook') req.rawBody = Buffer.from(buf);
+  }
+}));
 app.use(express.urlencoded({ extended: false, limit: '25kb' }));
 
 app.use((req, res, next) => {
@@ -75,36 +80,38 @@ function escapeHtml(s) { return String(s).replace(/[&<>'"]/g, c => ({'&':'&amp;'
 function mailTransport() {
   const host = String(process.env.SMTP_HOST || '').trim();
   const user = String(process.env.SMTP_USER || '').trim();
-
-  // Les mots de passe d'application Google font 16 caractères.
-  // On retire les espaces et retours à la ligne éventuels.
   const pass = String(process.env.SMTP_PASS || '').replace(/\s+/g, '');
-
   const port = Number(String(process.env.SMTP_PORT || '587').trim());
-  const secure =
-    String(process.env.SMTP_SECURE || 'false').trim().toLowerCase() === 'true';
-
-  if (!host || !user || !pass) {
-    return null;
-  }
-  console.log('SMTP DEBUG:', {
-  host,
-  port,
-  secure,
-  user,
-  passwordLength: pass.length
-});
-
+  const secure = String(process.env.SMTP_SECURE || 'false').trim().toLowerCase() === 'true';
+  if (!host || !user || !pass) return null;
   return nodemailer.createTransport({
     host,
     port,
     secure,
     requireTLS: port === 587,
-    auth: {
-      user,
-      pass
-    }
+    auth: { user, pass }
   });
+}
+function appBaseUrl(req) {
+  const configured = String(process.env.APP_BASE_URL || '').trim().replace(/\/+$/, '');
+  if (configured) return configured;
+  const proto = String(req.headers['x-forwarded-proto'] || req.protocol || 'https').split(',')[0].trim();
+  return `${proto}://${req.get('host')}`;
+}
+function chargilyConfig() {
+  const key = String(process.env.CHARGILY_SECRET_KEY || '').trim();
+  const mode = String(process.env.CHARGILY_MODE || 'test').trim().toLowerCase() === 'live' ? 'live' : 'test';
+  const baseUrl = mode === 'live' ? 'https://pay.chargily.net/api/v2' : 'https://pay.chargily.net/test/api/v2';
+  return { key, mode, baseUrl };
+}
+function verifyChargilySignature(rawBody, signature, secret) {
+  if (!rawBody || !signature || !secret) return false;
+  const computed = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+  try {
+    const a = Buffer.from(String(signature), 'hex');
+    const b = Buffer.from(computed, 'hex');
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+  } catch { return false; }
 }
 function signAdmin(admin) { return jwt.sign({ sub: admin.id, email: admin.email, role: 'admin' }, JWT_SECRET, { expiresIn: '8h' }); }
 function getCookie(req, name) {
@@ -241,9 +248,119 @@ app.post('/api/orders', orderLimiter, async (req, res) => {
       [orderResult.insertId,line.item.id,line.item.name,line.item.price,line.qty,Number(line.item.price)*line.qty]);
     await conn.commit();
     const [saved] = await conn.execute('SELECT id,public_id,status,payment_status,total,created_at FROM orders WHERE id=?', [orderResult.insertId]);
+    try {
+      const transport = mailTransport();
+      if (transport && process.env.RESTAURANT_EMAIL) await transport.sendMail({
+        from: process.env.MAIL_FROM || process.env.SMTP_USER,
+        to: process.env.RESTAURANT_EMAIL,
+        subject: `Nouvelle commande SAMMOLLO — ${publicId.slice(0,8).toUpperCase()}`,
+        text: `Nouvelle commande de ${customerName}. Total : ${total} DA. Téléphone : ${customerPhone}.`,
+        html: `<h2>Nouvelle commande SAMMOLLO</h2><p><strong>Référence :</strong> ${escapeHtml(publicId.slice(0,8).toUpperCase())}</p><p><strong>Client :</strong> ${escapeHtml(customerName)}</p><p><strong>Téléphone :</strong> ${escapeHtml(customerPhone)}</p><p><strong>Total :</strong> ${total} DA</p>`
+      });
+    } catch (mailError) { console.error('Notification nouvelle commande:', mailError.message); }
     res.status(201).json(saved[0]);
   } catch (e) { await conn.rollback().catch(()=>{}); console.error(e); res.status(500).json({ message: 'Impossible de créer la commande.' }); }
   finally { conn.release(); }
+});
+
+
+app.get('/api/orders/:publicId/status', async (req, res) => {
+  try {
+    const publicId = cleanText(req.params.publicId, 36);
+    const { rows } = await query('SELECT public_id,status,payment_status,total,created_at FROM orders WHERE public_id=? LIMIT 1', [publicId]);
+    if (!rows[0]) return res.status(404).json({ message: 'Commande introuvable.' });
+    res.json(rows[0]);
+  } catch (e) { console.error(e); res.status(500).json({ message: 'Impossible de vérifier la commande.' }); }
+});
+
+app.post('/api/orders/:publicId/checkout', orderLimiter, async (req, res) => {
+  try {
+    const publicId = cleanText(req.params.publicId, 36);
+    const { rows } = await query('SELECT id,public_id,total,payment_status,status FROM orders WHERE public_id=? LIMIT 1', [publicId]);
+    const order = rows[0];
+    if (!order) return res.status(404).json({ message: 'Commande introuvable.' });
+    if (order.status === 'cancelled') return res.status(409).json({ message: 'Cette commande a été annulée.' });
+    if (order.payment_status === 'paid') return res.status(409).json({ message: 'Cette commande est déjà payée.' });
+
+    const cfg = chargilyConfig();
+    if (!cfg.key) return res.status(503).json({ message: 'Le paiement en ligne n’est pas encore configuré.' });
+
+    const base = appBaseUrl(req);
+    const response = await fetch(`${cfg.baseUrl}/checkouts`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${cfg.key}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        amount: Number(order.total),
+        currency: 'dzd',
+        success_url: `${base}/menu.html?payment=success&order=${encodeURIComponent(order.public_id)}`,
+        failure_url: `${base}/menu.html?payment=failed&order=${encodeURIComponent(order.public_id)}`,
+        webhook_endpoint: `${base}/api/payments/chargily/webhook`,
+        description: `Commande SAMMOLLO ${order.public_id.slice(0, 8).toUpperCase()}`,
+        locale: 'fr'
+      })
+    });
+    const checkout = await response.json().catch(()=>({}));
+    if (!response.ok || !checkout.id || !checkout.checkout_url) {
+      console.error('Chargily checkout:', response.status, checkout);
+      return res.status(502).json({ message: 'Impossible de démarrer le paiement en ligne.' });
+    }
+
+    await query(`UPDATE orders SET payment_status='pending',payment_provider='chargily',payment_reference=?,updated_at=NOW() WHERE id=?`, [checkout.id, order.id]);
+    await query(`INSERT INTO payments(order_id,provider,provider_reference,amount,currency,status,raw_metadata)
+      VALUES(?,?,?,?,?,'pending',?)`, [order.id,'chargily',checkout.id,Number(order.total),'DZD',JSON.stringify({ mode: cfg.mode })]);
+
+    res.json({ checkoutUrl: checkout.checkout_url, checkoutId: checkout.id, mode: cfg.mode });
+  } catch (e) { console.error(e); res.status(500).json({ message: 'Impossible de démarrer le paiement en ligne.' }); }
+});
+
+app.post('/api/payments/chargily/webhook', async (req, res) => {
+  try {
+    const cfg = chargilyConfig();
+    const signature = req.get('signature') || '';
+    if (!verifyChargilySignature(req.rawBody, signature, cfg.key)) return res.status(403).json({ message: 'Signature invalide.' });
+
+    const event = req.body || {};
+    const checkout = event.data || {};
+    const checkoutId = cleanText(checkout.id, 180);
+    if (!checkoutId) return res.status(400).json({ message: 'Événement invalide.' });
+
+    const { rows } = await query(`SELECT p.id AS payment_id,p.order_id,p.amount,o.total,o.payment_status,o.public_id
+      FROM payments p JOIN orders o ON o.id=p.order_id
+      WHERE p.provider='chargily' AND p.provider_reference=? ORDER BY p.id DESC LIMIT 1`, [checkoutId]);
+    const rec = rows[0];
+    if (!rec) return res.status(200).json({ ok: true, ignored: true });
+
+    const type = String(event.type || '');
+    let paymentStatus = null;
+    if (type === 'checkout.paid') paymentStatus = 'paid';
+    else if (type === 'checkout.failed' || type === 'checkout.canceled' || type === 'checkout.cancelled') paymentStatus = 'failed';
+    if (!paymentStatus) return res.status(200).json({ ok: true, ignored: true });
+
+    if (paymentStatus === 'paid' && Number(checkout.amount) !== Number(rec.total)) {
+      console.error('Chargily amount mismatch', { checkoutId, received: checkout.amount, expected: rec.total });
+      return res.status(409).json({ message: 'Montant incohérent.' });
+    }
+
+    const conn = await getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('UPDATE payments SET status=?,raw_metadata=?,updated_at=NOW() WHERE id=?', [paymentStatus, JSON.stringify(event), rec.payment_id]);
+      await conn.execute('UPDATE orders SET payment_status=?,updated_at=NOW() WHERE id=?', [paymentStatus, rec.order_id]);
+      if (paymentStatus === 'paid') {
+        const receiptNumber = `SAM-${String(rec.public_id).replace(/-/g,'').slice(0,12).toUpperCase()}`;
+        await conn.execute(`INSERT INTO receipts(order_id,receipt_number,total,currency) VALUES(?,?,?,'DZD')
+          ON DUPLICATE KEY UPDATE total=VALUES(total)`, [rec.order_id, receiptNumber, Number(rec.total)]);
+      }
+      await conn.commit();
+    } catch (e) { await conn.rollback().catch(()=>{}); throw e; }
+    finally { conn.release(); }
+
+    res.json({ ok: true });
+  } catch (e) { console.error('Chargily webhook:', e); res.status(500).json({ message: 'Webhook non traité.' }); }
 });
 
 app.post('/api/admin/login', loginLimiter, async (req, res) => {
@@ -266,24 +383,95 @@ app.post('/api/admin/logout', requireAdmin, async (req, res) => {
 });
 
 app.get('/api/admin/dashboard', requireAdmin, async (_req, res) => {
-  const [messages, orders, revenue, items] = await Promise.all([
+  const [messages, pendingOrders, todayOrders, revenue, items, paidPayments, confirmedOrders] = await Promise.all([
     query("SELECT COUNT(*) AS count FROM contact_messages WHERE status='new'"),
+    query("SELECT COUNT(*) AS count FROM orders WHERE status='pending'"),
     query('SELECT COUNT(*) AS count FROM orders WHERE DATE(created_at)=CURDATE()'),
-    query("SELECT COALESCE(SUM(total),0) AS total FROM orders WHERE payment_status='paid' AND DATE(created_at)=CURDATE()"),
-    query('SELECT COUNT(*) AS count FROM menu_items WHERE available=1')
+    query("SELECT COALESCE(SUM(total),0) AS total FROM orders WHERE payment_status='paid' AND DATE(updated_at)=CURDATE()"),
+    query('SELECT COUNT(*) AS count FROM menu_items WHERE available=1'),
+    query("SELECT COUNT(*) AS count FROM payments WHERE status='paid' AND DATE(updated_at)=CURDATE()"),
+    query("SELECT COUNT(*) AS count FROM orders WHERE status IN ('confirmed','preparing','ready')")
   ]);
-  res.json({ newMessages: Number(messages.rows[0].count), todayOrders: Number(orders.rows[0].count), todayRevenue: Number(revenue.rows[0].total), availableItems: Number(items.rows[0].count) });
+  res.json({
+    newMessages: Number(messages.rows[0].count),
+    pendingOrders: Number(pendingOrders.rows[0].count),
+    todayOrders: Number(todayOrders.rows[0].count),
+    todayRevenue: Number(revenue.rows[0].total),
+    availableItems: Number(items.rows[0].count),
+    paidPayments: Number(paidPayments.rows[0].count),
+    activeOrders: Number(confirmedOrders.rows[0].count)
+  });
 });
 
-app.get('/api/admin/messages', requireAdmin, async (_req, res) => { const { rows } = await query('SELECT id,name,email,subject,message,status,created_at FROM contact_messages ORDER BY created_at DESC LIMIT 100'); res.json(rows); });
-app.get('/api/admin/orders', requireAdmin, async (_req, res) => { const { rows } = await query('SELECT id,public_id,customer_name,customer_phone,status,payment_status,total,created_at FROM orders ORDER BY created_at DESC LIMIT 100'); res.json(rows); });
+app.get('/api/admin/messages', requireAdmin, async (_req, res) => {
+  const { rows } = await query('SELECT id,name,email,subject,message,status,created_at,updated_at FROM contact_messages ORDER BY created_at DESC LIMIT 100');
+  res.json(rows);
+});
+app.patch('/api/admin/messages/:id/status', requireAdmin, async (req, res) => {
+  const allowed = ['new','read','replied','archived'];
+  if (!allowed.includes(req.body?.status)) return res.status(400).json({ message: 'Statut invalide.' });
+  const r = await query('UPDATE contact_messages SET status=?,updated_at=NOW() WHERE id=?', [req.body.status, req.params.id]);
+  if (!r.rowCount) return res.status(404).json({ message: 'Message introuvable.' });
+  await audit(req, 'message.status.update', 'contact_message', req.params.id);
+  res.json({ id:Number(req.params.id), status:req.body.status });
+});
+
+app.get('/api/admin/orders', requireAdmin, async (_req, res) => {
+  const { rows } = await query(`SELECT id,public_id,customer_name,customer_email,customer_phone,order_type,status,payment_status,payment_provider,total,notes,created_at,updated_at
+    FROM orders ORDER BY created_at DESC LIMIT 100`);
+  res.json(rows);
+});
+app.get('/api/admin/orders/:id', requireAdmin, async (req, res) => {
+  const { rows } = await query('SELECT * FROM orders WHERE id=? LIMIT 1', [req.params.id]);
+  const order = rows[0];
+  if (!order) return res.status(404).json({ message: 'Commande introuvable.' });
+  const [items, payments, receipt] = await Promise.all([
+    query('SELECT id,item_name,unit_price,quantity,line_total FROM order_items WHERE order_id=? ORDER BY id', [req.params.id]),
+    query('SELECT id,provider,provider_reference,amount,currency,status,created_at,updated_at FROM payments WHERE order_id=? ORDER BY created_at DESC', [req.params.id]),
+    query('SELECT receipt_number,total,currency,issued_at FROM receipts WHERE order_id=? LIMIT 1', [req.params.id])
+  ]);
+  res.json({ ...order, items: items.rows, payments: payments.rows, receipt: receipt.rows[0] || null });
+});
 
 app.patch('/api/admin/orders/:id/status', requireAdmin, async (req, res) => {
   const allowed = ['pending','confirmed','preparing','ready','completed','cancelled'];
-  if (!allowed.includes(req.body?.status)) return res.status(400).json({ message: 'Statut invalide.' });
-  const r = await query('UPDATE orders SET status=?,updated_at=NOW() WHERE id=?', [req.body.status, req.params.id]);
-  if (!r.rowCount) return res.status(404).json({ message: 'Commande introuvable.' });
-  await audit(req, 'order.status.update', 'order', req.params.id); res.json({ id:Number(req.params.id), status:req.body.status });
+  const status = req.body?.status;
+  if (!allowed.includes(status)) return res.status(400).json({ message: 'Statut invalide.' });
+  const { rows } = await query('SELECT id,public_id,customer_name,customer_email,status FROM orders WHERE id=? LIMIT 1', [req.params.id]);
+  const order = rows[0];
+  if (!order) return res.status(404).json({ message: 'Commande introuvable.' });
+  await query('UPDATE orders SET status=?,updated_at=NOW() WHERE id=?', [status, req.params.id]);
+  await audit(req, 'order.status.update', 'order', req.params.id);
+
+  const notify = {
+    confirmed: ['Commande confirmée', 'Votre commande a été confirmée par SAMMOLLO.'],
+    preparing: ['Commande en préparation', 'Votre commande est maintenant en préparation.'],
+    ready: ['Commande prête', 'Votre commande est prête.'],
+    completed: ['Commande terminée', 'Votre commande a été marquée comme terminée. Merci pour votre confiance.'],
+    cancelled: ['Commande annulée', 'Votre commande a été annulée. Vous pouvez contacter SAMMOLLO pour plus d’informations.']
+  }[status];
+  if (notify && order.customer_email) {
+    try {
+      const transport = mailTransport();
+      if (transport) await transport.sendMail({
+        from: process.env.MAIL_FROM || process.env.SMTP_USER,
+        to: order.customer_email,
+        subject: `${notify[0]} — SAMMOLLO`,
+        text: `${notify[1]}
+Référence : ${String(order.public_id).slice(0,8).toUpperCase()}`,
+        html: `<div style="font-family:Arial,sans-serif;background:#f7f3ec;padding:28px"><div style="max-width:560px;margin:auto;background:#fff;padding:26px;border-radius:14px;border-top:4px solid #d79a24"><h2>SAMMOLLO Restaurant</h2><p>${escapeHtml(notify[1])}</p><p><strong>Référence :</strong> ${escapeHtml(String(order.public_id).slice(0,8).toUpperCase())}</p></div></div>`
+      });
+    } catch (e) { console.error('Notification commande:', e.message); }
+  }
+  res.json({ id:Number(req.params.id), status });
+});
+
+app.get('/api/admin/payments', requireAdmin, async (_req, res) => {
+  const { rows } = await query(`SELECT p.id,p.provider,p.provider_reference,p.amount,p.currency,p.status,p.created_at,p.updated_at,
+      o.id AS order_id,o.public_id,o.customer_name,o.customer_phone
+    FROM payments p JOIN orders o ON o.id=p.order_id
+    ORDER BY p.created_at DESC LIMIT 150`);
+  res.json(rows);
 });
 
 app.patch('/api/admin/menu/:id', requireAdmin, async (req, res) => {

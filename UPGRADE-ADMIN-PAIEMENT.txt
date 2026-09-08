@@ -1,0 +1,37 @@
+SAMMOLLO — Upgrade administration + commandes + paiement
+=========================================================
+
+Fichiers modifiés :
+- server.js
+- admin-private.html
+- public/assets/js/admin.js
+- public/assets/css/admin.css
+- public/menu.html
+- public/assets/js/menu.js
+- public/assets/css/menu-pro.css
+
+Ce que cette mise à jour ajoute :
+- Connexion admin seule avant authentification.
+- Bouton œil pour afficher/masquer le mot de passe.
+- Dialogue Déconnexion / Annuler.
+- Dashboard avec commandes en attente, messages, CA payé, produits disponibles.
+- Commandes : confirmer, refuser, changer de statut, afficher les détails et articles.
+- Emails automatiques au client lors des changements importants de statut.
+- Messages : changement de statut Nouveau / Lu / Répondu / Archivé.
+- Section Paiements dans l'admin.
+- Paiement en ligne via Chargily Pay (CIB / Edahabia), avec webhook HMAC signé.
+- Génération automatique d'un reçu en base après confirmation du paiement.
+
+Variables Vercel supplémentaires pour le paiement :
+CHARGILY_SECRET_KEY=<clé secrète Chargily>
+CHARGILY_MODE=test
+APP_BASE_URL=https://sammollo.vercel.app
+
+Commencer obligatoirement en CHARGILY_MODE=test.
+Passer en live seulement après création/validation du compte marchand et tests complets.
+
+Aucune clé API ne doit être placée dans GitHub ou dans le JavaScript public.
+La clé Chargily doit rester uniquement dans les Environment Variables Vercel.
+
+La table payments et la table receipts existent déjà dans database/database.sql,
+donc aucune modification SQL n'est nécessaire si database.sql a déjà été importé.

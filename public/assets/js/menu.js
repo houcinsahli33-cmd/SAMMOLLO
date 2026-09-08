@@ -135,7 +135,10 @@
     e.preventDefault();
     if(!cart.length)return;
     orderStatus.textContent='Enregistrement de la commande…';
+    const submit=orderForm.querySelector('button[type="submit"]');
+    submit.disabled=true;
     const f=new FormData(orderForm);
+    const paymentMethod=f.get('paymentMethod')||'onsite';
     const payload={
       customerName:f.get('customerName'),
       customerPhone:f.get('customerPhone'),
@@ -147,12 +150,50 @@
     try{
       const r=await fetch('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
       const data=await r.json();
-      if(!r.ok)throw new Error(data.error||'Commande impossible');
-      orderStatus.textContent=`Commande ${data.orderNumber||''} enregistrée avec succès.`;
+      if(!r.ok)throw new Error(data.message||'Commande impossible');
+      const ref=String(data.public_id||'').slice(0,8).toUpperCase();
+
+      if(paymentMethod==='online'){
+        orderStatus.textContent=`Commande ${ref} créée. Préparation du paiement sécurisé…`;
+        const pr=await fetch(`/api/orders/${encodeURIComponent(data.public_id)}/checkout`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+        const payment=await pr.json();
+        if(!pr.ok)throw new Error(payment.message||'Paiement en ligne indisponible.');
+        window.location.assign(payment.checkoutUrl);
+        return;
+      }
+
+      orderStatus.textContent=`Commande ${ref} enregistrée. Elle est en attente de confirmation du restaurant.`;
       cart.splice(0,cart.length);renderCart();orderForm.reset();
     }catch(err){orderStatus.textContent=err.message||'Une erreur est survenue.'}
+    finally{submit.disabled=false;}
   });
+
+  async function showPaymentResult(){
+    const notice=document.getElementById('paymentNotice');
+    const params=new URLSearchParams(location.search);
+    const state=params.get('payment'), order=params.get('order');
+    if(!state||!order||!notice)return;
+    notice.hidden=false;
+    if(state==='failed'){
+      notice.className='payment-notice error';
+      notice.textContent='Le paiement a été annulé ou a échoué. La commande reste enregistrée mais non payée.';
+      return;
+    }
+    notice.className='payment-notice pending';
+    notice.textContent='Paiement reçu. Vérification de la confirmation sécurisée…';
+    try{
+      const r=await fetch(`/api/orders/${encodeURIComponent(order)}/status`);
+      const data=await r.json();
+      if(r.ok&&data.payment_status==='paid'){
+        notice.className='payment-notice success';
+        notice.textContent=`Paiement confirmé. Votre commande ${String(data.public_id).slice(0,8).toUpperCase()} est bien enregistrée.`;
+      } else {
+        notice.textContent='Le paiement est en cours de confirmation. Le statut sera mis à jour automatiquement.';
+      }
+    }catch{}
+  }
 
   renderCart();
   loadMenu();
+  showPaymentResult();
 })();

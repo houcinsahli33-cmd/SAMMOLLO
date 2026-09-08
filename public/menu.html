@@ -58,6 +58,8 @@
     <div class="menu-loading">Chargement du menu…</div>
   </section>
 
+  <div id="paymentNotice" class="payment-notice" hidden></div>
+
   <section id="commander" class="cta-band menu-cta-pro">
     <div>
       <p class="eyebrow">VOTRE COMMANDE</p>
@@ -159,6 +161,13 @@
         <label>Email<input name="customerEmail" type="email"></label>
         <label>Type de commande<select name="orderType"><option value="pickup">À emporter</option><option value="dine_in">Sur place</option></select></label>
       </div>
+      <label>Mode de paiement
+        <select name="paymentMethod">
+          <option value="onsite">Paiement sur place / au retrait</option>
+          <option value="online">Paiement en ligne — CIB / Edahabia</option>
+        </select>
+      </label>
+      <p class="payment-help">Le paiement en ligne est traité par une passerelle sécurisée. SAMMOLLO ne stocke jamais les données de votre carte.</p>
       <label>Note pour le restaurant<textarea name="notes" rows="3" placeholder="Ex. sans oignon, heure souhaitée…"></textarea></label>
       <button class="btn btn-gold full" type="submit">Confirmer la commande</button>
       <p id="orderStatus" class="form-status"></p>
