@@ -903,77 +903,185 @@
     grid-template-columns:1fr 1.45fr;
   }
 }
-/* =========================================
-   ALIGNEMENT FORMULAIRE COMMANDE
-========================================= */
 
-.order-customer-grid{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  column-gap:14px;
-  row-gap:14px;
-  align-items:start;
-}
 
-.order-field{
-  display:flex;
-  flex-direction:column;
-  gap:7px;
-  min-width:0;
-}
+/* ==========================================================
+   FORMULAIRE COMMANDE — ALIGNEMENT EXACT + VÉRIFICATION EMAIL
+   ========================================================== */
 
-.order-field label{
-  min-height:16px;
-  display:flex;
-  align-items:center;
-  font-size:12px;
-  font-weight:700;
-}
-
-.order-field input,
-.order-field select{
-  width:100%;
-  height:48px;
-  box-sizing:border-box;
-  border-radius:10px;
-}
-
-/* réserve la même hauteur sous les champs */
-.order-field-help{
-  min-height:16px;
-  margin:0;
-  font-size:10px;
-  line-height:16px;
-  color:#8f897f;
-}
-
-/* Première ligne : nom + téléphone */
-.order-name-field,
-.order-phone-field{
-  align-self:start;
-}
-
-/* Mobile */
-@media (max-width:600px){
-  .order-customer-grid{
-    grid-template-columns:1fr;
-    gap:14px;
-  }
-}
-/* Alignement exact Nom / Téléphone */
+/* Les deux champs de chaque ligne commencent exactement au même niveau. */
 .order-form-grid{
+  display:grid !important;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr) !important;
+  gap:10px !important;
   align-items:start !important;
 }
 
 .order-form-grid > label{
-  align-self:start !important;
+  display:grid !important;
+  grid-template-rows:16px 44px 15px !important;
+  gap:5px !important;
   align-content:start !important;
-  justify-content:start !important;
+  margin:0 !important;
 }
 
 .order-form-grid > label > input,
 .order-form-grid > label > select{
+  width:100% !important;
   height:44px !important;
   min-height:44px !important;
   margin:0 !important;
+  box-sizing:border-box !important;
+}
+
+.order-form-grid > label:not(:has(.field-help))::after{
+  content:"";
+  display:block;
+  height:15px;
+}
+
+.order-form-grid .field-help{
+  min-height:15px;
+  margin:0 !important;
+  line-height:15px !important;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+/* Fenêtre code email */
+#orderVerifyBackdrop{
+  z-index:5100;
+  padding:14px;
+  overflow-y:auto;
+  align-items:center;
+  justify-items:center;
+}
+
+.order-verify-modal{
+  position:relative;
+  width:min(430px,100%);
+  max-height:calc(100dvh - 28px);
+  overflow-y:auto;
+  padding:26px 26px 22px;
+  border-radius:18px;
+  background:#fffdf9;
+  box-shadow:0 28px 90px rgba(0,0,0,.36);
+}
+
+.order-verify-modal .eyebrow{
+  margin:0 0 7px;
+  font-size:9px;
+}
+
+.order-verify-modal h2{
+  margin:0 42px 8px 0;
+  color:#22201d;
+  font-family:"Cormorant Garamond",serif;
+  font-size:32px;
+  line-height:1.02;
+}
+
+.verify-lead{
+  margin:0 0 18px;
+  color:#777168;
+  font-size:12px;
+  line-height:1.55;
+}
+
+.verify-lead strong{
+  color:#403a33;
+}
+
+.order-code-inputs{
+  display:grid;
+  grid-template-columns:repeat(6,1fr);
+  gap:7px;
+}
+
+.order-code-inputs input{
+  width:100%;
+  min-width:0;
+  height:50px;
+  padding:0;
+  border:1px solid #ddd2c4;
+  border-radius:9px;
+  background:#fff;
+  color:#24211d;
+  font-size:22px;
+  font-weight:800;
+  text-align:center;
+  outline:0;
+  transition:border-color .15s ease, box-shadow .15s ease;
+}
+
+.order-code-inputs input:focus{
+  border-color:#d79a24;
+  box-shadow:0 0 0 3px rgba(215,154,36,.13);
+}
+
+.order-verify-meta{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-top:12px;
+  color:#847d73;
+  font-size:10px;
+}
+
+.order-verify-meta strong{
+  color:#a56e0d;
+}
+
+.order-resend-btn{
+  border:0;
+  padding:0;
+  background:transparent;
+  color:#a56e0d;
+  font:inherit;
+  font-weight:800;
+  cursor:pointer;
+}
+
+.order-resend-btn:disabled{
+  color:#aaa39a;
+  cursor:not-allowed;
+}
+
+.verify-actions{
+  margin-top:12px;
+}
+
+@media(max-width:620px){
+  .order-form-grid{
+    grid-template-columns:1fr !important;
+  }
+
+  .order-form-grid > label{
+    grid-template-rows:16px 44px auto !important;
+  }
+
+  .order-form-grid > label:not(:has(.field-help))::after{
+    height:0;
+  }
+
+  .order-form-grid .field-help{
+    white-space:normal;
+    overflow:visible;
+  }
+
+  .order-verify-modal{
+    width:100%;
+    padding:22px 16px 18px;
+  }
+
+  .order-code-inputs{
+    gap:5px;
+  }
+
+  .order-code-inputs input{
+    height:46px;
+    font-size:20px;
+  }
 }

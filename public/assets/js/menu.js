@@ -126,6 +126,21 @@
   const ratingInput=document.getElementById('orderRating');
   const ratingStars=[...document.querySelectorAll('.rating-star')];
 
+  const orderVerifyBackdrop=document.getElementById('orderVerifyBackdrop');
+  const closeOrderVerify=document.getElementById('closeOrderVerify');
+  const orderVerifyEmail=document.getElementById('orderVerifyEmail');
+  const orderVerifyTimer=document.getElementById('orderVerifyTimer');
+  const orderVerifyStatus=document.getElementById('orderVerifyStatus');
+  const resendOrderCode=document.getElementById('resendOrderCode');
+  const verifyOrderCodeBtn=document.getElementById('verifyOrderCodeBtn');
+  const backToOrderForm=document.getElementById('backToOrderForm');
+  const codeInputs=[...document.querySelectorAll('#orderCodeInputs input')];
+
+  let pendingOrderPayload=null;
+  let orderVerificationToken='';
+  let orderVerificationEndsAt=0;
+  let orderTimerInterval=null;
+
   function setRating(value){
     const rating=Math.min(5,Math.max(1,Number(value)||5));
     ratingInput.value=String(rating);
@@ -151,16 +166,87 @@
     orderStatus.textContent='';
   }
 
+  function clearOrderTimer(){
+    if(orderTimerInterval){
+      clearInterval(orderTimerInterval);
+      orderTimerInterval=null;
+    }
+  }
+
+  function updateOrderTimer(){
+    const seconds=Math.max(0,Math.ceil((orderVerificationEndsAt-Date.now())/1000));
+    const minutes=Math.floor(seconds/60);
+    const rest=seconds%60;
+    orderVerifyTimer.textContent=`${String(minutes).padStart(2,'0')}:${String(rest).padStart(2,'0')}`;
+    if(seconds<=0){
+      clearOrderTimer();
+      resendOrderCode.disabled=false;
+      verifyOrderCodeBtn.disabled=true;
+      orderVerifyStatus.textContent='Le code a expiré. Demandez un nouveau code.';
+    }
+  }
+
+  function startOrderTimer(seconds=180){
+    clearOrderTimer();
+    orderVerificationEndsAt=Date.now()+seconds*1000;
+    resendOrderCode.disabled=true;
+    verifyOrderCodeBtn.disabled=false;
+    updateOrderTimer();
+    orderTimerInterval=setInterval(updateOrderTimer,1000);
+  }
+
+  function resetCodeInputs(){
+    codeInputs.forEach(input=>{input.value=''});
+  }
+
+  function getOrderCode(){
+    return codeInputs.map(input=>input.value).join('');
+  }
+
+  function openOrderVerifyModal(email,expiresIn=180){
+    orderBackdrop.hidden=true;
+    orderVerifyBackdrop.hidden=false;
+    document.body.style.overflow='hidden';
+    orderVerifyEmail.textContent=email;
+    orderVerifyStatus.textContent='';
+    resetCodeInputs();
+    startOrderTimer(expiresIn);
+    requestAnimationFrame(()=>codeInputs[0]?.focus());
+  }
+
+  function closeOrderVerifyModal(){
+    orderVerifyBackdrop.hidden=true;
+    document.body.style.overflow='';
+    orderVerifyStatus.textContent='';
+    clearOrderTimer();
+  }
+
+  function backToOrder(){
+    orderVerifyBackdrop.hidden=true;
+    clearOrderTimer();
+    orderBackdrop.hidden=false;
+    document.body.style.overflow='hidden';
+    orderStatus.textContent='';
+  }
+
   document.getElementById('checkoutBtn').addEventListener('click',openOrderModal);
   closeOrderButton.addEventListener('click',closeOrderModal);
   cancelOrderButton.addEventListener('click',closeOrderModal);
+  closeOrderVerify.addEventListener('click',closeOrderVerifyModal);
+  backToOrderForm.addEventListener('click',backToOrder);
 
   orderBackdrop.addEventListener('click',e=>{
     if(e.target===orderBackdrop)closeOrderModal();
   });
 
+  orderVerifyBackdrop.addEventListener('click',e=>{
+    if(e.target===orderVerifyBackdrop)closeOrderVerifyModal();
+  });
+
   document.addEventListener('keydown',e=>{
-    if(e.key==='Escape'&&!orderBackdrop.hidden)closeOrderModal();
+    if(e.key!=='Escape')return;
+    if(!orderVerifyBackdrop.hidden)closeOrderVerifyModal();
+    else if(!orderBackdrop.hidden)closeOrderModal();
   });
 
   phoneInput.addEventListener('input',()=>{
@@ -172,40 +258,47 @@
   });
   setRating(5);
 
-  orderForm.addEventListener('submit',async e=>{
-    e.preventDefault();
-    if(!cart.length)return;
+  codeInputs.forEach((input,index)=>{
+    input.addEventListener('input',()=>{
+      input.value=input.value.replace(/\D/g,'').slice(-1);
+      if(input.value&&index<codeInputs.length-1)codeInputs[index+1].focus();
+    });
 
+    input.addEventListener('keydown',e=>{
+      if(e.key==='Backspace'&&!input.value&&index>0)codeInputs[index-1].focus();
+      if(e.key==='ArrowLeft'&&index>0)codeInputs[index-1].focus();
+      if(e.key==='ArrowRight'&&index<codeInputs.length-1)codeInputs[index+1].focus();
+    });
+
+    input.addEventListener('paste',e=>{
+      const digits=String(e.clipboardData?.getData('text')||'').replace(/\D/g,'').slice(0,6);
+      if(digits.length){
+        e.preventDefault();
+        digits.split('').forEach((digit,i)=>{if(codeInputs[i])codeInputs[i].value=digit});
+        codeInputs[Math.min(digits.length,6)-1]?.focus();
+      }
+    });
+  });
+
+  function buildOrderPayload(){
     const f=new FormData(orderForm);
     const customerName=String(f.get('customerName')||'').trim();
     const customerPhone=String(f.get('customerPhone')||'').replace(/\D/g,'');
-    const customerEmail=String(f.get('customerEmail')||'').trim();
+    const customerEmail=String(f.get('customerEmail')||'').trim().toLowerCase();
     const orderType=String(f.get('orderType')||'pickup');
     const rating=Math.min(5,Math.max(1,Number(f.get('rating'))||5));
 
     if(customerName.length<2){
-      orderStatus.textContent='Veuillez saisir votre nom et prénom.';
-      orderForm.querySelector('[name="customerName"]')?.focus();
-      return;
+      throw new Error('Veuillez saisir votre nom et prénom.');
     }
-
     if(!/^0[5-7]\d{8}$/.test(customerPhone)){
-      orderStatus.textContent='Numéro algérien invalide : 10 chiffres commençant par 05, 06 ou 07.';
-      phoneInput.focus();
-      return;
+      throw new Error('Numéro algérien invalide : 10 chiffres commençant par 05, 06 ou 07.');
+    }
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail)){
+      throw new Error('Une adresse email valide est obligatoire pour confirmer la commande.');
     }
 
-    if(customerEmail&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail)){
-      orderStatus.textContent='Veuillez saisir une adresse email valide.';
-      orderForm.querySelector('[name="customerEmail"]')?.focus();
-      return;
-    }
-
-    orderStatus.textContent='Enregistrement de la commande…';
-    const submit=orderForm.querySelector('button[type="submit"]');
-    submit.disabled=true;
-
-    const payload={
+    return{
       customerName,
       customerPhone,
       customerEmail,
@@ -213,29 +306,96 @@
       notes:`Évaluation client : ${rating}/5`,
       items:cart.map(x=>({id:x.id,qty:x.qty}))
     };
+  }
+
+  async function requestOrderCode(payload){
+    const r=await fetch('/api/orders/request-code',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload)
+    });
+    const data=await r.json();
+    if(!r.ok)throw new Error(data.message||'Impossible d’envoyer le code.');
+    orderVerificationToken=String(data.token||'');
+    if(!orderVerificationToken)throw new Error('Session de vérification invalide.');
+    return data;
+  }
+
+  orderForm.addEventListener('submit',async e=>{
+    e.preventDefault();
+    if(!cart.length)return;
+
+    const submit=orderForm.querySelector('button[type="submit"]');
 
     try{
-      const r=await fetch('/api/orders',{
+      pendingOrderPayload=buildOrderPayload();
+      orderStatus.textContent='Envoi du code de confirmation…';
+      submit.disabled=true;
+
+      const data=await requestOrderCode(pendingOrderPayload);
+      orderStatus.textContent='';
+      openOrderVerifyModal(pendingOrderPayload.customerEmail,Number(data.expiresIn)||180);
+    }catch(err){
+      orderStatus.textContent=err.message||'Une erreur est survenue.';
+    }finally{
+      submit.disabled=false;
+    }
+  });
+
+  resendOrderCode.addEventListener('click',async()=>{
+    if(!pendingOrderPayload)return;
+    resendOrderCode.disabled=true;
+    orderVerifyStatus.textContent='Envoi d’un nouveau code…';
+
+    try{
+      const data=await requestOrderCode(pendingOrderPayload);
+      resetCodeInputs();
+      orderVerifyStatus.textContent='Un nouveau code vient d’être envoyé.';
+      startOrderTimer(Number(data.expiresIn)||180);
+      codeInputs[0]?.focus();
+    }catch(err){
+      orderVerifyStatus.textContent=err.message||'Impossible de renvoyer le code.';
+      resendOrderCode.disabled=false;
+    }
+  });
+
+  verifyOrderCodeBtn.addEventListener('click',async()=>{
+    const code=getOrderCode();
+    if(!/^\d{6}$/.test(code)){
+      orderVerifyStatus.textContent='Saisissez les 6 chiffres du code reçu par email.';
+      codeInputs.find(input=>!input.value)?.focus();
+      return;
+    }
+
+    verifyOrderCodeBtn.disabled=true;
+    resendOrderCode.disabled=true;
+    orderVerifyStatus.textContent='Vérification du code…';
+
+    try{
+      const r=await fetch('/api/orders/verify',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify(payload)
+        body:JSON.stringify({token:orderVerificationToken,code})
       });
       const data=await r.json();
-      if(!r.ok)throw new Error(data.message||'Commande impossible');
+      if(!r.ok)throw new Error(data.message||'Code invalide.');
 
       const ref=String(data.public_id||'').slice(0,8).toUpperCase();
-      orderStatus.textContent=`Commande ${ref} enregistrée. Elle est en attente de confirmation du restaurant.`;
+      clearOrderTimer();
+      orderVerifyStatus.textContent=`Commande ${ref} confirmée. Elle est maintenant transmise au restaurant.`;
 
       cart.splice(0,cart.length);
       renderCart();
       orderForm.reset();
       setRating(5);
+      pendingOrderPayload=null;
+      orderVerificationToken='';
 
-      setTimeout(closeOrderModal,1400);
+      setTimeout(closeOrderVerifyModal,1700);
     }catch(err){
-      orderStatus.textContent=err.message||'Une erreur est survenue.';
-    }finally{
-      submit.disabled=false;
+      orderVerifyStatus.textContent=err.message||'Une erreur est survenue.';
+      verifyOrderCodeBtn.disabled=false;
+      if(Date.now()>=orderVerificationEndsAt)resendOrderCode.disabled=false;
     }
   });
 

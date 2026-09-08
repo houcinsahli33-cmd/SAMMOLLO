@@ -69,6 +69,7 @@ app.get('/', (_req, res) => {
 const contactLimiter = rateLimit({ windowMs: 10 * 60 * 1000, limit: 12, standardHeaders: true, legacyHeaders: false });
 const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 8, standardHeaders: true, legacyHeaders: false });
 const orderLimiter = rateLimit({ windowMs: 10 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false });
+const orderCodeLimiter = rateLimit({ windowMs: 10 * 60 * 1000, limit: 6, standardHeaders: true, legacyHeaders: false });
 
 function validEmail(v) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v || '').trim()); }
 function cleanText(v, max) { return String(v || '').trim().replace(/\0/g, '').slice(0, max); }
@@ -222,49 +223,309 @@ app.post('/api/contact/verify', contactLimiter, async (req, res) => {
   finally { conn.release(); }
 });
 
-app.post('/api/orders', orderLimiter, async (req, res) => {
+app.post('/api/orders/request-code', orderCodeLimiter, async (req, res) => {
   const conn = await getConnection();
   try {
-    const customerName = cleanText(req.body?.customerName, 120), customerPhone = cleanText(req.body?.customerPhone, 40).replace(/\D/g, '');
+    const customerName = cleanText(req.body?.customerName, 120);
+    const customerPhone = cleanText(req.body?.customerPhone, 40).replace(/\D/g, '');
     const customerEmail = cleanText(req.body?.customerEmail, 180).toLowerCase();
     const orderType = ['pickup','dine_in'].includes(req.body?.orderType) ? req.body.orderType : 'pickup';
-    const notes = cleanText(req.body?.notes, 1000), items = Array.isArray(req.body?.items) ? req.body.items.slice(0, 30) : [];
-    if (customerName.length < 2 || !items.length) return res.status(400).json({ message: 'Informations de commande incomplètes.' });
-    if (!/^0[5-7]\d{8}$/.test(customerPhone)) return res.status(400).json({ message: 'Numéro algérien invalide. Utilisez 10 chiffres commençant par 05, 06 ou 07.' });
-    if (customerEmail && !validEmail(customerEmail)) return res.status(400).json({ message: 'Adresse email invalide.' });
+    const notes = cleanText(req.body?.notes, 1000);
+    const items = Array.isArray(req.body?.items) ? req.body.items.slice(0, 30) : [];
 
-    const normalized = items.map(x => ({ id: Number(x.id), qty: Math.min(20, Math.max(1, Number(x.qty) || 1)) })).filter(x => Number.isInteger(x.id) && x.id > 0);
+    if (customerName.length < 2 || !items.length) {
+      return res.status(400).json({ message: 'Informations de commande incomplètes.' });
+    }
+    if (!/^0[5-7]\d{8}$/.test(customerPhone)) {
+      return res.status(400).json({ message: 'Numéro algérien invalide. Utilisez 10 chiffres commençant par 05, 06 ou 07.' });
+    }
+    if (!validEmail(customerEmail)) {
+      return res.status(400).json({ message: 'Une adresse email valide est obligatoire pour confirmer la commande.' });
+    }
+
+    const normalized = items
+      .map(x => ({
+        id: Number(x.id),
+        qty: Math.min(20, Math.max(1, Number(x.qty) || 1))
+      }))
+      .filter(x => Number.isInteger(x.id) && x.id > 0);
+
     const ids = [...new Set(normalized.map(x => x.id))];
-    if (!ids.length) return res.status(400).json({ message: 'Panier invalide.' });
-    const placeholders = ids.map(() => '?').join(',');
-    const [dbItems] = await conn.execute(`SELECT id,name,price,available FROM menu_items WHERE id IN (${placeholders})`, ids);
-    const byId = new Map(dbItems.map(x => [Number(x.id), x]));
-    const lines = normalized.map(x => ({ ...x, item: byId.get(x.id) })).filter(x => Number(x.item?.available) === 1);
-    if (!lines.length || lines.length !== normalized.length) return res.status(400).json({ message: 'Un ou plusieurs articles ne sont plus disponibles.' });
-    const subtotal = lines.reduce((s,x) => s + Number(x.item.price) * x.qty, 0), total = subtotal, publicId = randomUUID();
+    if (!ids.length) {
+      return res.status(400).json({ message: 'Panier invalide.' });
+    }
 
-    await conn.beginTransaction();
-    const [orderResult] = await conn.execute(`INSERT INTO orders(public_id,customer_name,customer_email,customer_phone,order_type,subtotal,total,notes)
-      VALUES(?,?,?,?,?,?,?,?)`, [publicId,customerName,customerEmail || null,customerPhone,orderType,subtotal,total,notes || null]);
-    for (const line of lines) await conn.execute(`INSERT INTO order_items(order_id,menu_item_id,item_name,unit_price,quantity,line_total) VALUES(?,?,?,?,?,?)`,
-      [orderResult.insertId,line.item.id,line.item.name,line.item.price,line.qty,Number(line.item.price)*line.qty]);
-    await conn.commit();
-    const [saved] = await conn.execute('SELECT id,public_id,status,payment_status,total,created_at FROM orders WHERE id=?', [orderResult.insertId]);
-    try {
-      const transport = mailTransport();
-      if (transport && process.env.RESTAURANT_EMAIL) await transport.sendMail({
-        from: process.env.MAIL_FROM || process.env.SMTP_USER,
-        to: process.env.RESTAURANT_EMAIL,
-        subject: `Nouvelle commande SAMMOLLO — ${publicId.slice(0,8).toUpperCase()}`,
-        text: `Nouvelle commande de ${customerName}. Total : ${total} DA. Téléphone : ${customerPhone}.`,
-        html: `<h2>Nouvelle commande SAMMOLLO</h2><p><strong>Référence :</strong> ${escapeHtml(publicId.slice(0,8).toUpperCase())}</p><p><strong>Client :</strong> ${escapeHtml(customerName)}</p><p><strong>Téléphone :</strong> ${escapeHtml(customerPhone)}</p><p><strong>Total :</strong> ${total} DA</p>`
-      });
-    } catch (mailError) { console.error('Notification nouvelle commande:', mailError.message); }
-    res.status(201).json(saved[0]);
-  } catch (e) { await conn.rollback().catch(()=>{}); console.error(e); res.status(500).json({ message: 'Impossible de créer la commande.' }); }
-  finally { conn.release(); }
+    const placeholders = ids.map(() => '?').join(',');
+    const [dbItems] = await conn.execute(
+      `SELECT id,name,price,available FROM menu_items WHERE id IN (${placeholders})`,
+      ids
+    );
+    const byId = new Map(dbItems.map(x => [Number(x.id), x]));
+    const lines = normalized
+      .map(x => ({ ...x, item: byId.get(x.id) }))
+      .filter(x => Number(x.item?.available) === 1);
+
+    if (!lines.length || lines.length !== normalized.length) {
+      return res.status(400).json({ message: 'Un ou plusieurs articles ne sont plus disponibles.' });
+    }
+
+    const transport = mailTransport();
+    if (!transport) {
+      return res.status(503).json({ message: 'Le service email n’est pas encore configuré.' });
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const code = String(crypto.randomInt(100000, 1000000));
+    const payload = {
+      customerName,
+      customerPhone,
+      customerEmail,
+      orderType,
+      notes,
+      items: normalized
+    };
+
+    await query(
+      'DELETE FROM order_verifications WHERE expires_at < NOW() OR email=?',
+      [customerEmail]
+    );
+
+    await query(
+      `INSERT INTO order_verifications(token,email,payload_json,code_hash,expires_at)
+       VALUES(?,?,?,?,DATE_ADD(NOW(), INTERVAL 3 MINUTE))`,
+      [token, customerEmail, JSON.stringify(payload), hashCode(token, code)]
+    );
+
+    await transport.sendMail({
+      from: process.env.MAIL_FROM || process.env.SMTP_USER,
+      to: customerEmail,
+      subject: 'Confirmez votre commande — SAMMOLLO',
+      text: `Votre code de confirmation SAMMOLLO est ${code}. Il expire dans 3 minutes.`,
+      html: `<div style="font-family:Arial,sans-serif;background:#f7f3ec;padding:30px">
+        <div style="max-width:540px;margin:auto;background:#fff;padding:28px;border-radius:14px;border-top:4px solid #d79a24">
+          <h2 style="margin:0 0 10px">SAMMOLLO Restaurant</h2>
+          <p>Utilisez ce code pour confirmer votre commande :</p>
+          <div style="font-size:34px;font-weight:800;letter-spacing:10px;color:#b87910;margin:24px 0">${code}</div>
+          <p>Ce code expire dans <strong>3 minutes</strong>.</p>
+          <p style="font-size:12px;color:#777">Si vous n’avez pas passé de commande, ignorez cet email.</p>
+        </div>
+      </div>`
+    });
+
+    res.json({
+      token,
+      expiresIn: 180,
+      emailHint: customerEmail.replace(/^(.{1,2}).*(@.*)$/, '$1••••$2')
+    });
+  } catch (e) {
+    console.error('Envoi code commande:', e);
+    res.status(500).json({ message: 'Impossible d’envoyer le code de confirmation pour le moment.' });
+  } finally {
+    conn.release();
+  }
 });
 
+app.post('/api/orders/verify', orderLimiter, async (req, res) => {
+  const conn = await getConnection();
+  let savedOrder = null;
+  let customer = null;
+
+  try {
+    const token = cleanText(req.body?.token, 80);
+    const code = cleanText(req.body?.code, 6);
+
+    if (!token || !/^\d{6}$/.test(code)) {
+      return res.status(400).json({ message: 'Code de confirmation invalide.' });
+    }
+
+    await conn.beginTransaction();
+
+    const [found] = await conn.execute(
+      'SELECT * FROM order_verifications WHERE token=? FOR UPDATE',
+      [token]
+    );
+    const rec = found[0];
+
+    if (!rec) {
+      await conn.rollback();
+      return res.status(400).json({ message: 'Session de vérification invalide ou expirée.' });
+    }
+
+    if (new Date(rec.expires_at).getTime() <= Date.now()) {
+      await conn.execute('DELETE FROM order_verifications WHERE token=?', [token]);
+      await conn.commit();
+      return res.status(400).json({ message: 'Le code a expiré. Demandez un nouveau code.' });
+    }
+
+    const attempts = Number(rec.attempts) + 1;
+    await conn.execute(
+      'UPDATE order_verifications SET attempts=? WHERE token=?',
+      [attempts, token]
+    );
+
+    if (attempts > 3) {
+      await conn.execute('DELETE FROM order_verifications WHERE token=?', [token]);
+      await conn.commit();
+      return res.status(429).json({ message: 'Nombre maximal de tentatives atteint. Demandez un nouveau code.' });
+    }
+
+    if (!safeEqualHex(hashCode(token, code), rec.code_hash)) {
+      await conn.commit();
+      return res.status(400).json({
+        message: `Code incorrect. ${Math.max(0, 3 - attempts)} tentative(s) restante(s).`
+      });
+    }
+
+    let payload;
+    try {
+      payload = JSON.parse(rec.payload_json);
+    } catch {
+      await conn.rollback();
+      return res.status(400).json({ message: 'Commande temporaire invalide.' });
+    }
+
+    const customerName = cleanText(payload.customerName, 120);
+    const customerPhone = cleanText(payload.customerPhone, 40).replace(/\D/g, '');
+    const customerEmail = cleanText(payload.customerEmail, 180).toLowerCase();
+    const orderType = ['pickup','dine_in'].includes(payload.orderType) ? payload.orderType : 'pickup';
+    const notes = cleanText(payload.notes, 1000);
+    const normalized = Array.isArray(payload.items)
+      ? payload.items.slice(0, 30)
+          .map(x => ({
+            id: Number(x.id),
+            qty: Math.min(20, Math.max(1, Number(x.qty) || 1))
+          }))
+          .filter(x => Number.isInteger(x.id) && x.id > 0)
+      : [];
+
+    if (
+      customerName.length < 2 ||
+      !/^0[5-7]\d{8}$/.test(customerPhone) ||
+      !validEmail(customerEmail) ||
+      !normalized.length ||
+      customerEmail !== String(rec.email).toLowerCase()
+    ) {
+      await conn.rollback();
+      return res.status(400).json({ message: 'Informations de commande invalides.' });
+    }
+
+    const ids = [...new Set(normalized.map(x => x.id))];
+    const placeholders = ids.map(() => '?').join(',');
+    const [dbItems] = await conn.execute(
+      `SELECT id,name,price,available FROM menu_items WHERE id IN (${placeholders})`,
+      ids
+    );
+
+    const byId = new Map(dbItems.map(x => [Number(x.id), x]));
+    const lines = normalized
+      .map(x => ({ ...x, item: byId.get(x.id) }))
+      .filter(x => Number(x.item?.available) === 1);
+
+    if (!lines.length || lines.length !== normalized.length) {
+      await conn.rollback();
+      return res.status(400).json({ message: 'Un ou plusieurs articles ne sont plus disponibles.' });
+    }
+
+    const subtotal = lines.reduce(
+      (sum, x) => sum + Number(x.item.price) * x.qty,
+      0
+    );
+    const total = subtotal;
+    const publicId = randomUUID();
+
+    const [orderResult] = await conn.execute(
+      `INSERT INTO orders(
+        public_id,customer_name,customer_email,customer_phone,
+        order_type,subtotal,total,notes
+      ) VALUES(?,?,?,?,?,?,?,?)`,
+      [
+        publicId,
+        customerName,
+        customerEmail,
+        customerPhone,
+        orderType,
+        subtotal,
+        total,
+        notes || null
+      ]
+    );
+
+    for (const line of lines) {
+      await conn.execute(
+        `INSERT INTO order_items(
+          order_id,menu_item_id,item_name,unit_price,quantity,line_total
+        ) VALUES(?,?,?,?,?,?)`,
+        [
+          orderResult.insertId,
+          line.item.id,
+          line.item.name,
+          line.item.price,
+          line.qty,
+          Number(line.item.price) * line.qty
+        ]
+      );
+    }
+
+    await conn.execute(
+      'DELETE FROM order_verifications WHERE token=?',
+      [token]
+    );
+
+    const [saved] = await conn.execute(
+      'SELECT id,public_id,status,payment_status,total,created_at FROM orders WHERE id=?',
+      [orderResult.insertId]
+    );
+
+    await conn.commit();
+
+    savedOrder = saved[0];
+    customer = {
+      name: customerName,
+      email: customerEmail,
+      phone: customerPhone,
+      total
+    };
+  } catch (e) {
+    await conn.rollback().catch(() => {});
+    console.error('Validation commande:', e);
+    return res.status(500).json({ message: 'Impossible de confirmer la commande.' });
+  } finally {
+    conn.release();
+  }
+
+  try {
+    const transport = mailTransport();
+    if (transport && savedOrder) {
+      if (process.env.RESTAURANT_EMAIL) {
+        await transport.sendMail({
+          from: process.env.MAIL_FROM || process.env.SMTP_USER,
+          to: process.env.RESTAURANT_EMAIL,
+          replyTo: customer.email,
+          subject: `Nouvelle commande SAMMOLLO — ${savedOrder.public_id.slice(0,8).toUpperCase()}`,
+          text: `Nouvelle commande de ${customer.name}. Total : ${customer.total} DA. Téléphone : ${customer.phone}.`,
+          html: `<h2>Nouvelle commande SAMMOLLO</h2>
+            <p><strong>Référence :</strong> ${escapeHtml(savedOrder.public_id.slice(0,8).toUpperCase())}</p>
+            <p><strong>Client :</strong> ${escapeHtml(customer.name)}</p>
+            <p><strong>Email vérifié :</strong> ${escapeHtml(customer.email)}</p>
+            <p><strong>Téléphone :</strong> ${escapeHtml(customer.phone)}</p>
+            <p><strong>Total :</strong> ${customer.total} DA</p>`
+        });
+      }
+    }
+  } catch (mailError) {
+    console.error('Notification nouvelle commande:', mailError.message);
+  }
+
+  res.status(201).json(savedOrder);
+});
+
+// L'ancien endpoint direct est volontairement bloqué :
+// une commande doit désormais être confirmée par email.
+app.post('/api/orders', orderLimiter, (_req, res) => {
+  res.status(400).json({
+    message: 'La vérification de l’adresse email est obligatoire avant l’enregistrement de la commande.'
+  });
+});
 
 app.get('/api/orders/:publicId/status', async (req, res) => {
   try {
@@ -753,6 +1014,21 @@ app.use('/api', (_req,res)=>res.status(404).json({message:'Endpoint introuvable.
 async function bootstrap(){
   try {
     const dbInfo=await testConnection(); console.log(`[MySQL] connecté à ${dbInfo.db_name}`);
+    await query(`CREATE TABLE IF NOT EXISTS order_verifications (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      token VARCHAR(80) NOT NULL,
+      email VARCHAR(180) NOT NULL,
+      payload_json LONGTEXT NOT NULL,
+      code_hash CHAR(64) NOT NULL,
+      attempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
+      expires_at DATETIME NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      UNIQUE KEY uq_order_verifications_token (token),
+      KEY idx_order_verifications_email (email),
+      KEY idx_order_verifications_expires (expires_at)
+    )`);
+    await query('DELETE FROM order_verifications WHERE expires_at < NOW()');
     if (process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD) {
       const initialEmail = String(process.env.ADMIN_EMAIL).trim().toLowerCase();
       const existingAdmins = await query('SELECT id FROM admins LIMIT 1');

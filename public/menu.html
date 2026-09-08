@@ -185,15 +185,18 @@
       </div>
 
       <div class="form-grid order-form-grid">
-        <label>
-          Email
+        <label class="order-email-field">
+          Email *
           <input
             name="customerEmail"
             type="email"
             autocomplete="email"
             maxlength="180"
             placeholder="exemple@email.com"
+            required
+            aria-describedby="emailHelp"
           >
+          <small id="emailHelp" class="field-help">Un code de confirmation sera envoyé à cette adresse</small>
         </label>
 
         <label>
@@ -229,6 +232,40 @@
         <button class="btn btn-gold order-confirm-btn" type="submit">Confirmer la commande</button>
       </div>
     </form>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="orderVerifyBackdrop" hidden>
+  <div class="order-verify-modal" role="dialog" aria-modal="true" aria-labelledby="orderVerifyTitle">
+    <button class="modal-close order-modal-close" id="closeOrderVerify" type="button" aria-label="Fermer la vérification">×</button>
+
+    <p class="eyebrow dark">VÉRIFICATION EMAIL</p>
+    <h2 id="orderVerifyTitle">Confirmez votre commande</h2>
+    <p class="verify-lead">
+      Nous avons envoyé un code à 6 chiffres à
+      <strong id="orderVerifyEmail">votre adresse email</strong>.
+    </p>
+
+    <div class="order-code-inputs" id="orderCodeInputs" aria-label="Code de confirmation à 6 chiffres">
+      <input inputmode="numeric" autocomplete="one-time-code" maxlength="1" aria-label="Chiffre 1">
+      <input inputmode="numeric" maxlength="1" aria-label="Chiffre 2">
+      <input inputmode="numeric" maxlength="1" aria-label="Chiffre 3">
+      <input inputmode="numeric" maxlength="1" aria-label="Chiffre 4">
+      <input inputmode="numeric" maxlength="1" aria-label="Chiffre 5">
+      <input inputmode="numeric" maxlength="1" aria-label="Chiffre 6">
+    </div>
+
+    <div class="order-verify-meta">
+      <span>Code valable <strong id="orderVerifyTimer">03:00</strong></span>
+      <button id="resendOrderCode" type="button" class="order-resend-btn" disabled>Renvoyer le code</button>
+    </div>
+
+    <p id="orderVerifyStatus" class="form-status order-status" role="status" aria-live="polite"></p>
+
+    <div class="order-form-actions verify-actions">
+      <button class="btn order-cancel-btn" id="backToOrderForm" type="button">Modifier</button>
+      <button class="btn btn-gold order-confirm-btn" id="verifyOrderCodeBtn" type="button">Valider le code</button>
+    </div>
   </div>
 </div>
 
