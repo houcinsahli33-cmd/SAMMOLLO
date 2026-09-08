@@ -960,3 +960,20 @@
     gap:14px;
   }
 }
+/* Alignement exact Nom / Téléphone */
+.order-form-grid{
+  align-items:start !important;
+}
+
+.order-form-grid > label{
+  align-self:start !important;
+  align-content:start !important;
+  justify-content:start !important;
+}
+
+.order-form-grid > label > input,
+.order-form-grid > label > select{
+  height:44px !important;
+  min-height:44px !important;
+  margin:0 !important;
+}
