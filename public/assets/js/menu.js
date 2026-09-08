@@ -120,80 +120,125 @@
   document.getElementById('closeCart').addEventListener('click',closeDrawer);
   back.addEventListener('click',closeDrawer);
 
-  document.getElementById('checkoutBtn').addEventListener('click',()=>{
+  const closeOrderButton=document.getElementById('closeOrder');
+  const cancelOrderButton=document.getElementById('cancelOrder');
+  const phoneInput=document.getElementById('customerPhone');
+  const ratingInput=document.getElementById('orderRating');
+  const ratingStars=[...document.querySelectorAll('.rating-star')];
+
+  function setRating(value){
+    const rating=Math.min(5,Math.max(1,Number(value)||5));
+    ratingInput.value=String(rating);
+    ratingStars.forEach(star=>{
+      const active=Number(star.dataset.rating)<=rating;
+      star.classList.toggle('active',active);
+      star.setAttribute('aria-pressed',Number(star.dataset.rating)===rating?'true':'false');
+    });
+  }
+
+  function openOrderModal(){
     if(!cart.length)return;
     closeDrawer();
     orderBackdrop.hidden=false;
     document.body.style.overflow='hidden';
-  });
-  document.getElementById('closeOrder').addEventListener('click',()=>{
+    orderStatus.textContent='';
+    requestAnimationFrame(()=>orderForm.querySelector('[name="customerName"]')?.focus());
+  }
+
+  function closeOrderModal(){
     orderBackdrop.hidden=true;
     document.body.style.overflow='';
+    orderStatus.textContent='';
+  }
+
+  document.getElementById('checkoutBtn').addEventListener('click',openOrderModal);
+  closeOrderButton.addEventListener('click',closeOrderModal);
+  cancelOrderButton.addEventListener('click',closeOrderModal);
+
+  orderBackdrop.addEventListener('click',e=>{
+    if(e.target===orderBackdrop)closeOrderModal();
   });
+
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'&&!orderBackdrop.hidden)closeOrderModal();
+  });
+
+  phoneInput.addEventListener('input',()=>{
+    phoneInput.value=phoneInput.value.replace(/\D/g,'').slice(0,10);
+  });
+
+  ratingStars.forEach(star=>{
+    star.addEventListener('click',()=>setRating(star.dataset.rating));
+  });
+  setRating(5);
 
   orderForm.addEventListener('submit',async e=>{
     e.preventDefault();
     if(!cart.length)return;
+
+    const f=new FormData(orderForm);
+    const customerName=String(f.get('customerName')||'').trim();
+    const customerPhone=String(f.get('customerPhone')||'').replace(/\D/g,'');
+    const customerEmail=String(f.get('customerEmail')||'').trim();
+    const orderType=String(f.get('orderType')||'pickup');
+    const rating=Math.min(5,Math.max(1,Number(f.get('rating'))||5));
+
+    if(customerName.length<2){
+      orderStatus.textContent='Veuillez saisir votre nom et prénom.';
+      orderForm.querySelector('[name="customerName"]')?.focus();
+      return;
+    }
+
+    if(!/^0[5-7]\d{8}$/.test(customerPhone)){
+      orderStatus.textContent='Numéro algérien invalide : 10 chiffres commençant par 05, 06 ou 07.';
+      phoneInput.focus();
+      return;
+    }
+
+    if(customerEmail&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail)){
+      orderStatus.textContent='Veuillez saisir une adresse email valide.';
+      orderForm.querySelector('[name="customerEmail"]')?.focus();
+      return;
+    }
+
     orderStatus.textContent='Enregistrement de la commande…';
     const submit=orderForm.querySelector('button[type="submit"]');
     submit.disabled=true;
-    const f=new FormData(orderForm);
-    const paymentMethod=f.get('paymentMethod')||'onsite';
+
     const payload={
-      customerName:f.get('customerName'),
-      customerPhone:f.get('customerPhone'),
-      customerEmail:f.get('customerEmail'),
-      orderType:f.get('orderType'),
-      notes:f.get('notes'),
+      customerName,
+      customerPhone,
+      customerEmail,
+      orderType,
+      notes:`Évaluation client : ${rating}/5`,
       items:cart.map(x=>({id:x.id,qty:x.qty}))
     };
+
     try{
-      const r=await fetch('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      const r=await fetch('/api/orders',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(payload)
+      });
       const data=await r.json();
       if(!r.ok)throw new Error(data.message||'Commande impossible');
+
       const ref=String(data.public_id||'').slice(0,8).toUpperCase();
-
-      if(paymentMethod==='online'){
-        orderStatus.textContent=`Commande ${ref} créée. Préparation du paiement sécurisé…`;
-        const pr=await fetch(`/api/orders/${encodeURIComponent(data.public_id)}/checkout`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
-        const payment=await pr.json();
-        if(!pr.ok)throw new Error(payment.message||'Paiement en ligne indisponible.');
-        window.location.assign(payment.checkoutUrl);
-        return;
-      }
-
       orderStatus.textContent=`Commande ${ref} enregistrée. Elle est en attente de confirmation du restaurant.`;
-      cart.splice(0,cart.length);renderCart();orderForm.reset();
-    }catch(err){orderStatus.textContent=err.message||'Une erreur est survenue.'}
-    finally{submit.disabled=false;}
-  });
 
-  async function showPaymentResult(){
-    const notice=document.getElementById('paymentNotice');
-    const params=new URLSearchParams(location.search);
-    const state=params.get('payment'), order=params.get('order');
-    if(!state||!order||!notice)return;
-    notice.hidden=false;
-    if(state==='failed'){
-      notice.className='payment-notice error';
-      notice.textContent='Le paiement a été annulé ou a échoué. La commande reste enregistrée mais non payée.';
-      return;
+      cart.splice(0,cart.length);
+      renderCart();
+      orderForm.reset();
+      setRating(5);
+
+      setTimeout(closeOrderModal,1400);
+    }catch(err){
+      orderStatus.textContent=err.message||'Une erreur est survenue.';
+    }finally{
+      submit.disabled=false;
     }
-    notice.className='payment-notice pending';
-    notice.textContent='Paiement reçu. Vérification de la confirmation sécurisée…';
-    try{
-      const r=await fetch(`/api/orders/${encodeURIComponent(order)}/status`);
-      const data=await r.json();
-      if(r.ok&&data.payment_status==='paid'){
-        notice.className='payment-notice success';
-        notice.textContent=`Paiement confirmé. Votre commande ${String(data.public_id).slice(0,8).toUpperCase()} est bien enregistrée.`;
-      } else {
-        notice.textContent='Le paiement est en cours de confirmation. Le statut sera mis à jour automatiquement.';
-      }
-    }catch{}
-  }
+  });
 
   renderCart();
   loadMenu();
-  showPaymentResult();
 })();

@@ -225,11 +225,12 @@ app.post('/api/contact/verify', contactLimiter, async (req, res) => {
 app.post('/api/orders', orderLimiter, async (req, res) => {
   const conn = await getConnection();
   try {
-    const customerName = cleanText(req.body?.customerName, 120), customerPhone = cleanText(req.body?.customerPhone, 40);
+    const customerName = cleanText(req.body?.customerName, 120), customerPhone = cleanText(req.body?.customerPhone, 40).replace(/\D/g, '');
     const customerEmail = cleanText(req.body?.customerEmail, 180).toLowerCase();
     const orderType = ['pickup','dine_in'].includes(req.body?.orderType) ? req.body.orderType : 'pickup';
     const notes = cleanText(req.body?.notes, 1000), items = Array.isArray(req.body?.items) ? req.body.items.slice(0, 30) : [];
-    if (customerName.length < 2 || customerPhone.length < 6 || !items.length) return res.status(400).json({ message: 'Informations de commande incomplètes.' });
+    if (customerName.length < 2 || !items.length) return res.status(400).json({ message: 'Informations de commande incomplètes.' });
+    if (!/^0[5-7]\d{8}$/.test(customerPhone)) return res.status(400).json({ message: 'Numéro algérien invalide. Utilisez 10 chiffres commençant par 05, 06 ou 07.' });
     if (customerEmail && !validEmail(customerEmail)) return res.status(400).json({ message: 'Adresse email invalide.' });
 
     const normalized = items.map(x => ({ id: Number(x.id), qty: Math.min(20, Math.max(1, Number(x.qty) || 1)) })).filter(x => Number.isInteger(x.id) && x.id > 0);

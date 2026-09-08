@@ -58,8 +58,6 @@
     <div class="menu-loading">Chargement du menu…</div>
   </section>
 
-  <div id="paymentNotice" class="payment-notice" hidden></div>
-
   <section id="commander" class="cta-band menu-cta-pro">
     <div>
       <p class="eyebrow">VOTRE COMMANDE</p>
@@ -147,30 +145,89 @@
 <div class="drawer-backdrop" id="drawerBackdrop"></div>
 
 <div class="modal-backdrop" id="orderBackdrop" hidden>
-  <div class="order-modal">
-    <button class="modal-close" id="closeOrder" type="button" aria-label="Fermer">×</button>
+  <div class="order-modal order-modal-compact" role="dialog" aria-modal="true" aria-labelledby="orderModalTitle">
+    <button class="modal-close order-modal-close" id="closeOrder" type="button" aria-label="Fermer la fenêtre">×</button>
+
     <p class="eyebrow dark">FINALISER</p>
-    <h2>Vos informations</h2>
+    <h2 id="orderModalTitle">Vos informations</h2>
     <p class="modal-lead">Renseignez vos coordonnées pour transmettre la commande au restaurant.</p>
-    <form id="orderForm">
-      <div class="form-grid">
-        <label>Nom et prénom *<input name="customerName" required minlength="2"></label>
-        <label>Téléphone *<input name="customerPhone" required minlength="6"></label>
+
+    <form id="orderForm" novalidate>
+      <div class="form-grid order-form-grid">
+        <label>
+          Nom et prénom *
+          <input
+            name="customerName"
+            autocomplete="name"
+            required
+            minlength="2"
+            maxlength="120"
+            placeholder="Votre nom complet"
+          >
+        </label>
+
+        <label>
+          Téléphone *
+          <input
+            id="customerPhone"
+            name="customerPhone"
+            type="tel"
+            inputmode="numeric"
+            autocomplete="tel"
+            required
+            maxlength="10"
+            pattern="0[5-7][0-9]{8}"
+            placeholder="07 XX XX XX XX"
+            aria-describedby="phoneHelp"
+          >
+          <small id="phoneHelp" class="field-help">10 chiffres · commence par 05, 06 ou 07</small>
+        </label>
       </div>
-      <div class="form-grid">
-        <label>Email<input name="customerEmail" type="email"></label>
-        <label>Type de commande<select name="orderType"><option value="pickup">À emporter</option><option value="dine_in">Sur place</option></select></label>
+
+      <div class="form-grid order-form-grid">
+        <label>
+          Email
+          <input
+            name="customerEmail"
+            type="email"
+            autocomplete="email"
+            maxlength="180"
+            placeholder="exemple@email.com"
+          >
+        </label>
+
+        <label>
+          Type de commande
+          <select name="orderType">
+            <option value="pickup">À emporter</option>
+            <option value="dine_in">Sur place</option>
+          </select>
+        </label>
       </div>
-      <label>Mode de paiement
-        <select name="paymentMethod">
-          <option value="onsite">Paiement sur place / au retrait</option>
-          <option value="online">Paiement en ligne — CIB / Edahabia</option>
-        </select>
-      </label>
-      <p class="payment-help">Le paiement en ligne est traité par une passerelle sécurisée. SAMMOLLO ne stocke jamais les données de votre carte.</p>
-      <label>Note pour le restaurant<textarea name="notes" rows="3" placeholder="Ex. sans oignon, heure souhaitée…"></textarea></label>
-      <button class="btn btn-gold full" type="submit">Confirmer la commande</button>
-      <p id="orderStatus" class="form-status"></p>
+
+      <div class="rating-field">
+        <div>
+          <span class="rating-title">Votre note</span>
+          <small>Choisissez de 1 à 5 étoiles</small>
+        </div>
+
+        <div class="rating-stars" id="orderRatingStars" role="radiogroup" aria-label="Note de 1 à 5 étoiles">
+          <button type="button" class="rating-star" data-rating="1" aria-label="1 étoile" aria-pressed="false">★</button>
+          <button type="button" class="rating-star" data-rating="2" aria-label="2 étoiles" aria-pressed="false">★</button>
+          <button type="button" class="rating-star" data-rating="3" aria-label="3 étoiles" aria-pressed="false">★</button>
+          <button type="button" class="rating-star" data-rating="4" aria-label="4 étoiles" aria-pressed="false">★</button>
+          <button type="button" class="rating-star active" data-rating="5" aria-label="5 étoiles" aria-pressed="true">★</button>
+        </div>
+
+        <input id="orderRating" name="rating" type="hidden" value="5">
+      </div>
+
+      <p id="orderStatus" class="form-status order-status" role="status" aria-live="polite"></p>
+
+      <div class="order-form-actions">
+        <button class="btn order-cancel-btn" id="cancelOrder" type="button">Annuler</button>
+        <button class="btn btn-gold order-confirm-btn" type="submit">Confirmer la commande</button>
+      </div>
     </form>
   </div>
 </div>
