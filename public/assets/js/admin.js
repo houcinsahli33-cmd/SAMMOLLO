@@ -1023,14 +1023,15 @@
 
   $('#loginForm').addEventListener('submit',async e=>{
     e.preventDefault();
+    const form=e.currentTarget;
     const status=$('#loginStatus');
     const button=$('#loginSubmit');
     status.className='form-message';status.textContent='Connexion en cours…';button.disabled=true;
     try{
-      const data=Object.fromEntries(new FormData(e.currentTarget));
+      const data=Object.fromEntries(new FormData(form));
       const result=await api('/api/admin/login',{method:'POST',body:JSON.stringify(data)});
       currentAdmin={displayName:result.admin.displayName||'Administrateur',email:result.admin.email||''};
-      e.currentTarget.reset();
+      form.reset();
       $('#adminPassword').type='password';
       status.textContent='';
       showApp();
