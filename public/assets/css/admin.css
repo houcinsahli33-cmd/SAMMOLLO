@@ -808,3 +808,46 @@ a{color:inherit}
   .reply-helper{flex-direction:column}
 }
 @media(max-width:980px){.message-state-wrap{display:none}}
+/* =====================================================
+   SIDEBAR ADMIN — SCROLL VERTICAL
+===================================================== */
+
+.admin-side{
+  height:100vh !important;
+  max-height:100vh !important;
+
+  display:flex !important;
+  flex-direction:column !important;
+
+  overflow-y:auto !important;
+  overflow-x:hidden !important;
+
+  scrollbar-width:thin;
+  scrollbar-color:rgba(214,163,58,.65) rgba(255,255,255,.05);
+}
+
+/* Barre de défilement Chrome / Edge */
+.admin-side::-webkit-scrollbar{
+  width:7px;
+}
+
+.admin-side::-webkit-scrollbar-track{
+  background:rgba(255,255,255,.04);
+  border-radius:20px;
+}
+
+.admin-side::-webkit-scrollbar-thumb{
+  background:rgba(214,163,58,.55);
+  border-radius:20px;
+}
+
+.admin-side::-webkit-scrollbar-thumb:hover{
+  background:#d6a33a;
+}
+
+/* Zone Retour au site + Déconnexion */
+.side-bottom{
+  margin-top:auto !important;
+  padding-bottom:24px !important;
+  flex-shrink:0 !important;
+}
