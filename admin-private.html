@@ -6,6 +6,9 @@
   <meta name="robots" content="noindex,nofollow,noarchive,nosnippet">
   <meta name="theme-color" content="#0b0d0f">
   <title>SAMMOLLO | Administration</title>
+  <link rel="icon" type="image/png" href="/image/logorestaurant.png">
+  <link rel="shortcut icon" type="image/png" href="/image/logorestaurant.png">
+  <link rel="apple-touch-icon" href="/image/logorestaurant.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -19,54 +22,86 @@
     <div class="auth-glow auth-glow-one"></div>
     <div class="auth-glow auth-glow-two"></div>
 
-    <a class="auth-back" href="/index.html">
-      <span aria-hidden="true">←</span>
-      <span>Retour au site</span>
+    <a class="auth-back" href="/index.html" aria-label="Retourner au site SAMMOLLO">
+      <span class="auth-back-icon" aria-hidden="true">←</span>
+      <span class="auth-back-copy">
+        <strong>Retour au site</strong>
+        <small>Ouvrir l’accueil SAMMOLLO</small>
+      </span>
     </a>
 
-    <div class="auth-card">
-      <div class="auth-brand">
-        <img src="/image/logorestaurant.png" alt="Logo SAMMOLLO">
-        <div>
-          <strong>SAMMOLLO</strong>
-          <span>ESPACE ADMINISTRATION</span>
-        </div>
-      </div>
-
-      <div class="auth-copy">
-        <p class="kicker">ACCÈS PRIVÉ</p>
-        <h1 id="loginTitle">Gérez SAMMOLLO depuis un seul espace</h1>
-        <p>Commandes, messages, carte, catégories et événements : tout le contenu utile du restaurant est centralisé ici.</p>
-      </div>
-
-      <form id="loginForm" class="auth-form" novalidate>
-        <label class="field-label" for="adminEmail">Adresse email</label>
-        <div class="field-control">
-          <span class="field-icon" aria-hidden="true">@</span>
-          <input id="adminEmail" name="email" type="email" autocomplete="username" placeholder="Adresse administrateur" required>
+    <div class="auth-layout">
+      <aside class="auth-showcase" aria-hidden="true">
+        <div class="auth-showcase-brand">
+          <img src="/image/logorestaurant.png" alt="">
+          <div>
+            <strong>SAMMOLLO</strong>
+            <span>RESTAURANT · DRAÂ EL MIZAN</span>
+          </div>
         </div>
 
-        <div class="field-label-row">
-          <label class="field-label" for="adminPassword">Mot de passe</label>
-          <button id="forgotCredentials" class="text-button" type="button">Identifiants oubliés ?</button>
+        <div class="auth-showcase-content">
+          <p class="kicker">CENTRE DE CONTRÔLE</p>
+          <h2>Votre restaurant,<br>piloté simplement.</h2>
+          <p>Un espace privé pour suivre les commandes et maintenir le contenu de SAMMOLLO à jour.</p>
+
+          <div class="auth-feature-list">
+            <span><i>01</i> Commandes &amp; suivi</span>
+            <span><i>02</i> Carte &amp; produits</span>
+            <span><i>03</i> Messages &amp; événements</span>
+          </div>
         </div>
 
-        <div class="field-control password-control">
-          <span class="field-icon lock-icon" aria-hidden="true">●</span>
-          <input id="adminPassword" name="password" type="password" autocomplete="current-password" placeholder="Votre mot de passe" required>
-          <button id="togglePassword" class="password-toggle" type="button" aria-label="Afficher le mot de passe" aria-pressed="false">◉</button>
+        <div class="auth-showcase-footer">
+          <span class="security-dot"></span>
+          <span>Accès privé · Connexion sécurisée</span>
+        </div>
+      </aside>
+
+      <div class="auth-card">
+        <div class="auth-brand">
+          <img src="/image/logorestaurant.png" alt="Logo SAMMOLLO">
+          <div>
+            <strong>SAMMOLLO</strong>
+            <span>ESPACE ADMINISTRATION</span>
+          </div>
         </div>
 
-        <button id="loginSubmit" class="admin-btn auth-submit" type="submit">
-          <span>Se connecter</span>
-          <span aria-hidden="true">→</span>
-        </button>
-        <p class="form-message" id="loginStatus" role="status" aria-live="polite"></p>
-      </form>
+        <div class="auth-copy">
+          <p class="kicker">ACCÈS ADMINISTRATEUR</p>
+          <h1 id="loginTitle">Bon retour.</h1>
+          <p>Identifiez-vous pour accéder au tableau de bord et gérer le restaurant.</p>
+        </div>
 
-      <div class="auth-security">
-        <span class="security-dot"></span>
-        <span>Session administrateur sécurisée</span>
+        <form id="loginForm" class="auth-form" novalidate>
+          <label class="field-label" for="adminEmail">Adresse email</label>
+          <div class="field-control">
+            <span class="field-icon" aria-hidden="true">@</span>
+            <input id="adminEmail" name="email" type="email" autocomplete="username" placeholder="Adresse administrateur" required>
+          </div>
+
+          <div class="field-label-row">
+            <label class="field-label" for="adminPassword">Mot de passe</label>
+            <button id="forgotCredentials" class="text-button" type="button">Identifiants oubliés ?</button>
+          </div>
+
+          <div class="field-control password-control">
+            <span class="field-icon lock-icon" aria-hidden="true">●</span>
+            <input id="adminPassword" name="password" type="password" autocomplete="current-password" placeholder="Votre mot de passe" required>
+            <button id="togglePassword" class="password-toggle" type="button" aria-label="Afficher le mot de passe" aria-pressed="false">◉</button>
+          </div>
+
+          <button id="loginSubmit" class="admin-btn auth-submit" type="submit">
+            <span>Accéder à l’administration</span>
+            <span class="auth-submit-arrow" aria-hidden="true">→</span>
+          </button>
+          <p class="form-message" id="loginStatus" role="status" aria-live="polite"></p>
+        </form>
+
+        <div class="auth-security auth-security-card">
+          <span class="security-dot"></span>
+          <span>Session protégée · Données sensibles côté serveur</span>
+        </div>
       </div>
     </div>
   </section>
