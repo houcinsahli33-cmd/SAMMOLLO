@@ -796,63 +796,130 @@ app.patch('/api/admin/profile/password', requireAdmin, async (req, res) => {
 });
 
 app.get('/api/admin/dashboard', requireAdmin, async (_req, res) => {
-  const [messages, pendingOrders, todayOrders, revenue, items, paidPayments, confirmedOrders] = await Promise.all([
-    query("SELECT COUNT(*) AS count FROM contact_messages WHERE status='new'"),
-    query("SELECT COUNT(*) AS count FROM orders WHERE status='pending'"),
-    query('SELECT COUNT(*) AS count FROM orders WHERE DATE(created_at)=CURDATE()'),
-    query("SELECT COALESCE(SUM(total),0) AS total FROM orders WHERE payment_status='paid' AND DATE(updated_at)=CURDATE()"),
-    query('SELECT COUNT(*) AS count FROM menu_items WHERE available=1'),
-    query("SELECT COUNT(*) AS count FROM payments WHERE status='paid' AND DATE(updated_at)=CURDATE()"),
-    query("SELECT COUNT(*) AS count FROM orders WHERE status IN ('confirmed','preparing','ready')")
-  ]);
-  res.json({
-    newMessages: Number(messages.rows[0].count),
-    pendingOrders: Number(pendingOrders.rows[0].count),
-    todayOrders: Number(todayOrders.rows[0].count),
-    todayRevenue: Number(revenue.rows[0].total),
-    availableItems: Number(items.rows[0].count),
-    paidPayments: Number(paidPayments.rows[0].count),
-    activeOrders: Number(confirmedOrders.rows[0].count)
-  });
+  try {
+    const [messages, pendingOrders, todayOrders, items, activeOrders, totalProducts, publishedEvents] = await Promise.all([
+      query("SELECT COUNT(*) AS count FROM contact_messages WHERE status='new'"),
+      query("SELECT COUNT(*) AS count FROM orders WHERE status='pending'"),
+      query('SELECT COUNT(*) AS count FROM orders WHERE DATE(created_at)=CURDATE()'),
+      query('SELECT COUNT(*) AS count FROM menu_items WHERE available=1'),
+      query("SELECT COUNT(*) AS count FROM orders WHERE status IN ('confirmed','preparing','ready')"),
+      query('SELECT COUNT(*) AS count FROM menu_items'),
+      query("SELECT COUNT(*) AS count FROM events WHERE status='published'")
+    ]);
+
+    res.json({
+      newMessages: Number(messages.rows[0].count),
+      pendingOrders: Number(pendingOrders.rows[0].count),
+      todayOrders: Number(todayOrders.rows[0].count),
+      availableItems: Number(items.rows[0].count),
+      activeOrders: Number(activeOrders.rows[0].count),
+      totalProducts: Number(totalProducts.rows[0].count),
+      publishedEvents: Number(publishedEvents.rows[0].count)
+    });
+  } catch (e) {
+    console.error('Dashboard admin:', e);
+    res.status(500).json({ message: 'Impossible de charger le tableau de bord.' });
+  }
 });
 
-app.get('/api/admin/messages', requireAdmin, async (_req, res) => {
-  const { rows } = await query('SELECT id,name,email,subject,message,status,created_at,updated_at FROM contact_messages ORDER BY created_at DESC LIMIT 100');
-  res.json(rows);
+app.get('/api/admin/activity', requireAdmin, async (_req, res) => {
+  try {
+    const { rows } = await query(`SELECT id,action,entity_type,entity_id,created_at
+      FROM audit_logs ORDER BY created_at DESC LIMIT 16`);
+    res.json(rows);
+  } catch (e) {
+    console.error('Activité admin:', e);
+    res.status(500).json({ message: 'Impossible de charger l’activité récente.' });
+  }
 });
+
+// ======================================================
+// ADMIN — MESSAGES
+// ======================================================
+app.get('/api/admin/messages', requireAdmin, async (_req, res) => {
+  try {
+    const { rows } = await query(`SELECT id,name,email,subject,message,status,created_at,updated_at
+      FROM contact_messages ORDER BY created_at DESC LIMIT 150`);
+    res.json(rows);
+  } catch (e) {
+    console.error('Messages admin:', e);
+    res.status(500).json({ message: 'Impossible de charger les messages.' });
+  }
+});
+
 app.patch('/api/admin/messages/:id/status', requireAdmin, async (req, res) => {
   const allowed = ['new','read','replied','archived'];
-  if (!allowed.includes(req.body?.status)) return res.status(400).json({ message: 'Statut invalide.' });
-  const r = await query('UPDATE contact_messages SET status=?,updated_at=NOW() WHERE id=?', [req.body.status, req.params.id]);
+  const status = req.body?.status;
+  if (!allowed.includes(status)) return res.status(400).json({ message: 'Statut invalide.' });
+
+  const r = await query(
+    'UPDATE contact_messages SET status=?,updated_at=NOW() WHERE id=?',
+    [status, req.params.id]
+  );
   if (!r.rowCount) return res.status(404).json({ message: 'Message introuvable.' });
+
   await audit(req, 'message.status.update', 'contact_message', req.params.id);
-  res.json({ id:Number(req.params.id), status:req.body.status });
+  res.json({ id: Number(req.params.id), status });
 });
 
-app.get('/api/admin/orders', requireAdmin, async (_req, res) => {
-  const { rows } = await query(`SELECT id,public_id,customer_name,customer_email,customer_phone,order_type,status,payment_status,payment_provider,total,notes,created_at,updated_at
-    FROM orders ORDER BY created_at DESC LIMIT 100`);
-  res.json(rows);
+app.delete('/api/admin/messages/:id', requireAdmin, async (req, res) => {
+  try {
+    const r = await query('DELETE FROM contact_messages WHERE id=?', [req.params.id]);
+    if (!r.rowCount) return res.status(404).json({ message: 'Message introuvable.' });
+    await audit(req, 'message.delete', 'contact_message', req.params.id);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('Suppression message:', e);
+    res.status(500).json({ message: 'Impossible de supprimer le message.' });
+  }
 });
+
+// ======================================================
+// ADMIN — COMMANDES
+// ======================================================
+app.get('/api/admin/orders', requireAdmin, async (_req, res) => {
+  try {
+    const { rows } = await query(`SELECT id,public_id,customer_name,customer_email,customer_phone,
+      order_type,status,total,notes,created_at,updated_at
+      FROM orders ORDER BY created_at DESC LIMIT 150`);
+    res.json(rows);
+  } catch (e) {
+    console.error('Commandes admin:', e);
+    res.status(500).json({ message: 'Impossible de charger les commandes.' });
+  }
+});
+
 app.get('/api/admin/orders/:id', requireAdmin, async (req, res) => {
-  const { rows } = await query('SELECT * FROM orders WHERE id=? LIMIT 1', [req.params.id]);
-  const order = rows[0];
-  if (!order) return res.status(404).json({ message: 'Commande introuvable.' });
-  const [items, payments, receipt] = await Promise.all([
-    query('SELECT id,item_name,unit_price,quantity,line_total FROM order_items WHERE order_id=? ORDER BY id', [req.params.id]),
-    query('SELECT id,provider,provider_reference,amount,currency,status,created_at,updated_at FROM payments WHERE order_id=? ORDER BY created_at DESC', [req.params.id]),
-    query('SELECT receipt_number,total,currency,issued_at FROM receipts WHERE order_id=? LIMIT 1', [req.params.id])
-  ]);
-  res.json({ ...order, items: items.rows, payments: payments.rows, receipt: receipt.rows[0] || null });
+  try {
+    const { rows } = await query(`SELECT id,public_id,customer_name,customer_email,customer_phone,
+      order_type,status,subtotal,total,notes,created_at,updated_at
+      FROM orders WHERE id=? LIMIT 1`, [req.params.id]);
+    const order = rows[0];
+    if (!order) return res.status(404).json({ message: 'Commande introuvable.' });
+
+    const items = await query(
+      'SELECT id,item_name,unit_price,quantity,line_total FROM order_items WHERE order_id=? ORDER BY id',
+      [req.params.id]
+    );
+    res.json({ ...order, items: items.rows });
+  } catch (e) {
+    console.error('Détail commande:', e);
+    res.status(500).json({ message: 'Impossible de charger la commande.' });
+  }
 });
 
 app.patch('/api/admin/orders/:id/status', requireAdmin, async (req, res) => {
   const allowed = ['pending','confirmed','preparing','ready','completed','cancelled'];
   const status = req.body?.status;
   if (!allowed.includes(status)) return res.status(400).json({ message: 'Statut invalide.' });
-  const { rows } = await query('SELECT id,public_id,customer_name,customer_email,status FROM orders WHERE id=? LIMIT 1', [req.params.id]);
+
+  const { rows } = await query(
+    'SELECT id,public_id,customer_name,customer_email,status FROM orders WHERE id=? LIMIT 1',
+    [req.params.id]
+  );
   const order = rows[0];
   if (!order) return res.status(404).json({ message: 'Commande introuvable.' });
+
   await query('UPDATE orders SET status=?,updated_at=NOW() WHERE id=?', [status, req.params.id]);
   await audit(req, 'order.status.update', 'order', req.params.id);
 
@@ -863,6 +930,7 @@ app.patch('/api/admin/orders/:id/status', requireAdmin, async (req, res) => {
     completed: ['Commande terminée', 'Votre commande a été marquée comme terminée. Merci pour votre confiance.'],
     cancelled: ['Commande annulée', 'Votre commande a été annulée. Vous pouvez contacter SAMMOLLO pour plus d’informations.']
   }[status];
+
   if (notify && order.customer_email) {
     try {
       const transport = mailTransport();
@@ -870,144 +938,401 @@ app.patch('/api/admin/orders/:id/status', requireAdmin, async (req, res) => {
         from: process.env.MAIL_FROM || process.env.SMTP_USER,
         to: order.customer_email,
         subject: `${notify[0]} — SAMMOLLO`,
-        text: `${notify[1]}
-Référence : ${String(order.public_id).slice(0,8).toUpperCase()}`,
+        text: `${notify[1]}\nRéférence : ${String(order.public_id).slice(0,8).toUpperCase()}`,
         html: `<div style="font-family:Arial,sans-serif;background:#f7f3ec;padding:28px"><div style="max-width:560px;margin:auto;background:#fff;padding:26px;border-radius:14px;border-top:4px solid #d79a24"><h2>SAMMOLLO Restaurant</h2><p>${escapeHtml(notify[1])}</p><p><strong>Référence :</strong> ${escapeHtml(String(order.public_id).slice(0,8).toUpperCase())}</p></div></div>`
       });
-    } catch (e) { console.error('Notification commande:', e.message); }
+    } catch (e) {
+      console.error('Notification commande:', e.message);
+    }
   }
-  res.json({ id:Number(req.params.id), status });
+
+  res.json({ id: Number(req.params.id), status });
 });
 
-app.get('/api/admin/payments', requireAdmin, async (_req, res) => {
-  const { rows } = await query(`SELECT p.id,p.provider,p.provider_reference,p.amount,p.currency,p.status,p.created_at,p.updated_at,
-      o.id AS order_id,o.public_id,o.customer_name,o.customer_phone
-    FROM payments p JOIN orders o ON o.id=p.order_id
-    ORDER BY p.created_at DESC LIMIT 150`);
-  res.json(rows);
+app.delete('/api/admin/orders/:id', requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await query('SELECT id,status,public_id FROM orders WHERE id=? LIMIT 1', [req.params.id]);
+    const order = rows[0];
+    if (!order) return res.status(404).json({ message: 'Commande introuvable.' });
+
+    if (!['completed','cancelled'].includes(order.status)) {
+      return res.status(409).json({
+        message: 'Pour éviter une suppression accidentelle, terminez ou annulez d’abord cette commande.'
+      });
+    }
+
+    await query('DELETE FROM orders WHERE id=?', [req.params.id]);
+    await audit(req, 'order.delete', 'order', req.params.id);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('Suppression commande:', e);
+    res.status(500).json({ message: 'Impossible de supprimer la commande.' });
+  }
 });
 
-
 // ======================================================
-// ADMIN — UPLOAD PHOTO PRODUIT (VERCEL BLOB)
+// ADMIN — IMAGES VERCEL BLOB
 // ======================================================
-const PRODUCT_IMAGE_TYPES = new Set([
-  'image/jpeg',
-  'image/png',
-  'image/webp'
-]);
+const ADMIN_IMAGE_TYPES = new Set(['image/jpeg','image/png','image/webp']);
 
-app.post(
-  '/api/admin/uploads/product-image',
-  requireAdmin,
-  express.raw({
-    type: ['image/jpeg', 'image/png', 'image/webp'],
-    limit: '4mb'
-  }),
-  async (req, res) => {
+function isManagedBlobUrl(value) {
+  return /^https:\/\/.*\.blob\.vercel-storage\.com\//i.test(String(value || ''));
+}
+
+async function safeDeleteBlob(url) {
+  if (!isManagedBlobUrl(url)) return;
+  try { await del(url); }
+  catch (e) { console.error('Suppression Blob:', e.message); }
+}
+
+function adminImageHandler(folder, auditAction) {
+  return async (req, res) => {
     try {
       const contentType = String(req.headers['content-type'] || '')
-        .split(';')[0]
-        .trim()
-        .toLowerCase();
+        .split(';')[0].trim().toLowerCase();
 
-      if (!PRODUCT_IMAGE_TYPES.has(contentType)) {
-        return res.status(415).json({
-          message: 'Format non autorisé. Utilisez JPG, PNG ou WebP.'
-        });
+      if (!ADMIN_IMAGE_TYPES.has(contentType)) {
+        return res.status(415).json({ message: 'Format non autorisé. Utilisez JPG, PNG ou WebP.' });
       }
-
       if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
         return res.status(400).json({ message: 'Aucune image reçue.' });
       }
 
-      const originalName = String(req.headers['x-file-name'] || 'produit').slice(0, 120);
+      const originalName = String(req.headers['x-file-name'] || 'image').slice(0, 120);
       const cleanName = originalName
         .replace(/\.[^/.]+$/, '')
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
         .replace(/[^a-zA-Z0-9_-]+/g, '-')
         .replace(/^-+|-+$/g, '')
-        .toLowerCase() || 'produit';
+        .toLowerCase() || 'image';
 
-      const extensionByType = {
-        'image/jpeg': 'jpg',
-        'image/png': 'png',
-        'image/webp': 'webp'
-      };
-
-      const blob = await put(
-        `menu/${cleanName}.${extensionByType[contentType]}`,
-        req.body,
-        {
-          access: 'public',
-          contentType,
-          addRandomSuffix: true
-        }
-      );
-
-      await audit(req, 'menu.image.upload', 'blob', blob.pathname);
-
-      res.status(201).json({
-        ok: true,
-        url: blob.url,
-        pathname: blob.pathname
+      const ext = { 'image/jpeg':'jpg', 'image/png':'png', 'image/webp':'webp' }[contentType];
+      const blob = await put(`${folder}/${cleanName}.${ext}`, req.body, {
+        access: 'public', contentType, addRandomSuffix: true
       });
+
+      await audit(req, auditAction, 'blob', blob.pathname);
+      res.status(201).json({ ok: true, url: blob.url, pathname: blob.pathname });
     } catch (e) {
-      console.error('Erreur upload image produit:', e);
+      console.error('Upload image admin:', e);
       res.status(500).json({ message: "Impossible d'envoyer l'image pour le moment." });
     }
+  };
+}
+
+const adminRawImage = express.raw({
+  type: ['image/jpeg','image/png','image/webp'],
+  limit: '4mb'
+});
+
+app.post('/api/admin/uploads/product-image', requireAdmin, adminRawImage, adminImageHandler('menu','menu.image.upload'));
+app.post('/api/admin/uploads/event-image', requireAdmin, adminRawImage, adminImageHandler('events','event.image.upload'));
+
+function adminSlug(value, fallback = 'element') {
+  const slug = cleanText(value, 180)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return slug || fallback;
+}
+
+// ======================================================
+// ADMIN — CARTE & PRODUITS
+// ======================================================
+app.get('/api/admin/menu', requireAdmin, async (_req, res) => {
+  try {
+    const { rows } = await query(`SELECT m.id,m.category_id,m.name,m.slug,m.description,m.price,m.old_price,
+      m.image_path,m.available,m.featured,m.badge,m.sort_order,m.created_at,m.updated_at,
+      c.name AS category,c.slug AS category_slug
+      FROM menu_items m JOIN categories c ON c.id=m.category_id
+      ORDER BY c.sort_order,m.sort_order,m.id`);
+    res.json(rows);
+  } catch (e) {
+    console.error('Menu admin:', e);
+    res.status(500).json({ message: 'Impossible de charger les produits.' });
   }
-);
+});
+
+app.post('/api/admin/menu', requireAdmin, async (req, res) => {
+  const categoryId = Number(req.body?.categoryId);
+  const name = cleanText(req.body?.name, 120);
+  const description = cleanText(req.body?.description, 2000);
+  const price = Number(req.body?.price);
+  const imagePath = cleanText(req.body?.imagePath, 500) || null;
+  const badge = cleanText(req.body?.badge, 40) || null;
+  const sortOrder = Number.isFinite(Number(req.body?.sortOrder)) ? Number(req.body.sortOrder) : 0;
+  const slug = adminSlug(req.body?.slug || name, 'produit') + '-' + crypto.randomBytes(3).toString('hex');
+
+  if (!Number.isInteger(categoryId) || name.length < 2 || !Number.isInteger(price) || price < 0) {
+    return res.status(400).json({ message: 'Données produit invalides.' });
+  }
+
+  try {
+    const cat = await query('SELECT id FROM categories WHERE id=? LIMIT 1', [categoryId]);
+    if (!cat.rows.length) return res.status(400).json({ message: 'Catégorie invalide.' });
+
+    const r = await query(`INSERT INTO menu_items(
+      category_id,name,slug,description,price,image_path,available,featured,badge,sort_order
+    ) VALUES(?,?,?,?,?,?,?,?,?,?)`, [
+      categoryId, name, slug, description, price, imagePath,
+      req.body?.available !== false ? 1 : 0,
+      req.body?.featured ? 1 : 0,
+      badge, sortOrder
+    ]);
+
+    const { rows } = await query('SELECT * FROM menu_items WHERE id=?', [r.insertId]);
+    await audit(req, 'menu.create', 'menu_item', r.insertId);
+    res.status(201).json(rows[0]);
+  } catch (e) {
+    console.error('Création produit:', e);
+    res.status(500).json({ message: 'Création du produit impossible.' });
+  }
+});
 
 app.patch('/api/admin/menu/:id', requireAdmin, async (req, res) => {
-  const name=cleanText(req.body?.name,120), description=cleanText(req.body?.description,2000), price=Number(req.body?.price);
-  const available=req.body?.available?1:0, featured=req.body?.featured?1:0, badge=cleanText(req.body?.badge,40)||null;
-  if(name.length<2||!Number.isInteger(price)||price<0) return res.status(400).json({message:'Données produit invalides.'});
-  const r=await query('UPDATE menu_items SET name=?,description=?,price=?,available=?,featured=?,badge=?,updated_at=NOW() WHERE id=?',[name,description,price,available,featured,badge,req.params.id]);
-  if(!r.rowCount) return res.status(404).json({message:'Produit introuvable.'});
-  const {rows}=await query('SELECT * FROM menu_items WHERE id=?',[req.params.id]); await audit(req,'menu.update','menu_item',req.params.id); res.json(rows[0]);
-});
+  try {
+    const existingResult = await query('SELECT * FROM menu_items WHERE id=? LIMIT 1', [req.params.id]);
+    const existing = existingResult.rows[0];
+    if (!existing) return res.status(404).json({ message: 'Produit introuvable.' });
 
-app.post('/api/admin/menu', requireAdmin, async (req,res)=>{
-  const categoryId=Number(req.body?.categoryId), name=cleanText(req.body?.name,120), description=cleanText(req.body?.description,2000), price=Number(req.body?.price);
-  const imagePath=cleanText(req.body?.imagePath,500)||null, badge=cleanText(req.body?.badge,40)||null;
-  const slug=cleanText(req.body?.slug,140).toLowerCase().replace(/[^a-z0-9-]+/g,'-').replace(/^-|-$/g,'');
-  if(!Number.isInteger(categoryId)||!name||!slug||!Number.isInteger(price)||price<0) return res.status(400).json({message:'Données produit invalides.'});
-  try { const r=await query(`INSERT INTO menu_items(category_id,name,slug,description,price,image_path,available,featured,badge) VALUES(?,?,?,?,?,?,?,?,?)`,[categoryId,name,slug,description,price,imagePath,req.body?.available!==false?1:0,req.body?.featured?1:0,badge]); const {rows}=await query('SELECT * FROM menu_items WHERE id=?',[r.insertId]); await audit(req,'menu.create','menu_item',r.insertId); res.status(201).json(rows[0]); }
-  catch(e){ if(e.code==='ER_DUP_ENTRY') return res.status(409).json({message:'Ce slug existe déjà.'}); console.error(e); res.status(500).json({message:'Création impossible.'}); }
-});
-app.delete('/api/admin/menu/:id', requireAdmin, async (req, res) => {
-  const { rows } = await query('SELECT image_path FROM menu_items WHERE id=? LIMIT 1', [req.params.id]);
-  const item = rows[0];
-  if (!item) return res.status(404).json({ message: 'Produit introuvable.' });
+    const categoryId = Number(req.body?.categoryId ?? existing.category_id);
+    const name = cleanText(req.body?.name ?? existing.name, 120);
+    const description = cleanText(req.body?.description ?? existing.description, 2000);
+    const price = Number(req.body?.price ?? existing.price);
+    const imagePath = req.body?.imagePath === undefined
+      ? existing.image_path
+      : (cleanText(req.body.imagePath, 500) || null);
+    const badge = req.body?.badge === undefined
+      ? existing.badge
+      : (cleanText(req.body.badge, 40) || null);
+    const sortOrder = Number.isFinite(Number(req.body?.sortOrder))
+      ? Number(req.body.sortOrder)
+      : Number(existing.sort_order || 0);
 
-  const r = await query('DELETE FROM menu_items WHERE id=?', [req.params.id]);
-  if (!r.rowCount) return res.status(404).json({ message: 'Produit introuvable.' });
+    if (!Number.isInteger(categoryId) || name.length < 2 || !Number.isInteger(price) || price < 0) {
+      return res.status(400).json({ message: 'Données produit invalides.' });
+    }
 
-  if (item.image_path && /^https:\/\/.*\.blob\.vercel-storage\.com\//i.test(item.image_path)) {
-    try { await del(item.image_path); }
-    catch (e) { console.error('Suppression Blob produit:', e.message); }
+    const cat = await query('SELECT id FROM categories WHERE id=? LIMIT 1', [categoryId]);
+    if (!cat.rows.length) return res.status(400).json({ message: 'Catégorie invalide.' });
+
+    await query(`UPDATE menu_items SET category_id=?,name=?,description=?,price=?,image_path=?,
+      available=?,featured=?,badge=?,sort_order=?,updated_at=NOW() WHERE id=?`, [
+      categoryId, name, description, price, imagePath,
+      req.body?.available === undefined ? Number(existing.available) : (req.body.available ? 1 : 0),
+      req.body?.featured === undefined ? Number(existing.featured) : (req.body.featured ? 1 : 0),
+      badge, sortOrder, req.params.id
+    ]);
+
+    if (existing.image_path && existing.image_path !== imagePath) {
+      await safeDeleteBlob(existing.image_path);
+    }
+
+    const { rows } = await query(`SELECT m.*,c.name AS category FROM menu_items m
+      JOIN categories c ON c.id=m.category_id WHERE m.id=?`, [req.params.id]);
+    await audit(req, 'menu.update', 'menu_item', req.params.id);
+    res.json(rows[0]);
+  } catch (e) {
+    console.error('Modification produit:', e);
+    res.status(500).json({ message: 'Modification du produit impossible.' });
   }
+});
 
-  await audit(req, 'menu.delete', 'menu_item', req.params.id);
-  res.json({ ok: true });
-});
-app.get('/api/admin/categories', requireAdmin, async (_req,res)=>{ const {rows}=await query('SELECT id,name,slug,sort_order,active FROM categories ORDER BY sort_order,id'); res.json(rows); });
-app.get('/api/admin/events', requireAdmin, async (_req,res)=>{ const {rows}=await query('SELECT * FROM events ORDER BY sort_order,created_at DESC'); res.json(rows); });
+app.delete('/api/admin/menu/:id', requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await query('SELECT image_path FROM menu_items WHERE id=? LIMIT 1', [req.params.id]);
+    const item = rows[0];
+    if (!item) return res.status(404).json({ message: 'Produit introuvable.' });
 
-app.post('/api/admin/events', requireAdmin, async (req,res)=>{
-  const title=cleanText(req.body?.title,140), summary=cleanText(req.body?.summary,3000), imagePath=cleanText(req.body?.imagePath,500)||null, recurrence=cleanText(req.body?.recurrenceLabel,120)||null;
-  const slug=cleanText(req.body?.slug,160).toLowerCase().replace(/[^a-z0-9-]+/g,'-').replace(/^-|-$/g,''); if(!title||!slug)return res.status(400).json({message:'Titre et slug obligatoires.'});
-  try { const r=await query('INSERT INTO events(title,slug,summary,image_path,event_date,recurrence_label,status,featured) VALUES(?,?,?,?,?,?,?,?)',[title,slug,summary,imagePath,req.body?.eventDate||null,recurrence,['draft','published','archived'].includes(req.body?.status)?req.body.status:'published',req.body?.featured?1:0]); const {rows}=await query('SELECT * FROM events WHERE id=?',[r.insertId]); await audit(req,'event.create','event',r.insertId); res.status(201).json(rows[0]); }
-  catch(e){ if(e.code==='ER_DUP_ENTRY') return res.status(409).json({message:'Cet événement existe déjà.'}); console.error(e); res.status(500).json({message:'Création impossible.'}); }
+    await query('DELETE FROM menu_items WHERE id=?', [req.params.id]);
+    await safeDeleteBlob(item.image_path);
+    await audit(req, 'menu.delete', 'menu_item', req.params.id);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('Suppression produit:', e);
+    res.status(500).json({ message: 'Suppression du produit impossible.' });
+  }
 });
-app.patch('/api/admin/events/:id', requireAdmin, async (req,res)=>{
-  const title=cleanText(req.body?.title,140), summary=cleanText(req.body?.summary,3000), imagePath=cleanText(req.body?.imagePath,500)||null; if(!title)return res.status(400).json({message:'Titre obligatoire.'});
-  const status=['draft','published','archived'].includes(req.body?.status)?req.body.status:'published'; const r=await query('UPDATE events SET title=?,summary=?,image_path=?,event_date=?,recurrence_label=?,status=?,featured=?,updated_at=NOW() WHERE id=?',[title,summary,imagePath,req.body?.eventDate||null,cleanText(req.body?.recurrenceLabel,120)||null,status,req.body?.featured?1:0,req.params.id]);
-  if(!r.rowCount)return res.status(404).json({message:'Événement introuvable.'}); const {rows}=await query('SELECT * FROM events WHERE id=?',[req.params.id]); await audit(req,'event.update','event',req.params.id); res.json(rows[0]);
+
+// ======================================================
+// ADMIN — CATÉGORIES
+// ======================================================
+app.get('/api/admin/categories', requireAdmin, async (_req, res) => {
+  try {
+    const { rows } = await query(`SELECT c.id,c.name,c.slug,c.sort_order,c.active,c.created_at,c.updated_at,
+      COUNT(m.id) AS item_count
+      FROM categories c LEFT JOIN menu_items m ON m.category_id=c.id
+      GROUP BY c.id,c.name,c.slug,c.sort_order,c.active,c.created_at,c.updated_at
+      ORDER BY c.sort_order,c.id`);
+    res.json(rows.map(r => ({ ...r, item_count: Number(r.item_count || 0) })));
+  } catch (e) {
+    console.error('Catégories admin:', e);
+    res.status(500).json({ message: 'Impossible de charger les catégories.' });
+  }
 });
-app.delete('/api/admin/events/:id', requireAdmin, async (req,res)=>{ const r=await query('DELETE FROM events WHERE id=?',[req.params.id]); if(!r.rowCount)return res.status(404).json({message:'Événement introuvable.'}); await audit(req,'event.delete','event',req.params.id); res.json({ok:true}); });
+
+app.post('/api/admin/categories', requireAdmin, async (req, res) => {
+  const name = cleanText(req.body?.name, 80);
+  const slug = adminSlug(req.body?.slug || name, 'categorie');
+  const sortOrder = Number.isFinite(Number(req.body?.sortOrder)) ? Number(req.body.sortOrder) : 0;
+  if (name.length < 2) return res.status(400).json({ message: 'Nom de catégorie invalide.' });
+
+  try {
+    const r = await query(
+      'INSERT INTO categories(name,slug,sort_order,active) VALUES(?,?,?,?)',
+      [name, slug, sortOrder, req.body?.active !== false ? 1 : 0]
+    );
+    const { rows } = await query('SELECT * FROM categories WHERE id=?', [r.insertId]);
+    await audit(req, 'category.create', 'category', r.insertId);
+    res.status(201).json(rows[0]);
+  } catch (e) {
+    if (e.code === 'ER_DUP_ENTRY') return res.status(409).json({ message: 'Cette catégorie existe déjà.' });
+    console.error('Création catégorie:', e);
+    res.status(500).json({ message: 'Création de la catégorie impossible.' });
+  }
+});
+
+app.patch('/api/admin/categories/:id', requireAdmin, async (req, res) => {
+  const name = cleanText(req.body?.name, 80);
+  const slug = adminSlug(req.body?.slug || name, 'categorie');
+  const sortOrder = Number.isFinite(Number(req.body?.sortOrder)) ? Number(req.body.sortOrder) : 0;
+  if (name.length < 2) return res.status(400).json({ message: 'Nom de catégorie invalide.' });
+
+  try {
+    const r = await query(
+      'UPDATE categories SET name=?,slug=?,sort_order=?,active=?,updated_at=NOW() WHERE id=?',
+      [name, slug, sortOrder, req.body?.active !== false ? 1 : 0, req.params.id]
+    );
+    if (!r.rowCount) return res.status(404).json({ message: 'Catégorie introuvable.' });
+    const { rows } = await query('SELECT * FROM categories WHERE id=?', [req.params.id]);
+    await audit(req, 'category.update', 'category', req.params.id);
+    res.json(rows[0]);
+  } catch (e) {
+    if (e.code === 'ER_DUP_ENTRY') return res.status(409).json({ message: 'Ce nom ou ce slug est déjà utilisé.' });
+    console.error('Modification catégorie:', e);
+    res.status(500).json({ message: 'Modification de la catégorie impossible.' });
+  }
+});
+
+app.delete('/api/admin/categories/:id', requireAdmin, async (req, res) => {
+  try {
+    const count = await query('SELECT COUNT(*) AS count FROM menu_items WHERE category_id=?', [req.params.id]);
+    if (Number(count.rows[0].count) > 0) {
+      return res.status(409).json({
+        message: 'Cette catégorie contient encore des produits. Déplacez ou supprimez-les avant de supprimer la catégorie.'
+      });
+    }
+
+    const r = await query('DELETE FROM categories WHERE id=?', [req.params.id]);
+    if (!r.rowCount) return res.status(404).json({ message: 'Catégorie introuvable.' });
+    await audit(req, 'category.delete', 'category', req.params.id);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('Suppression catégorie:', e);
+    res.status(500).json({ message: 'Suppression de la catégorie impossible.' });
+  }
+});
+
+// ======================================================
+// ADMIN — ÉVÉNEMENTS
+// ======================================================
+app.get('/api/admin/events', requireAdmin, async (_req, res) => {
+  try {
+    const { rows } = await query('SELECT * FROM events ORDER BY sort_order,created_at DESC');
+    res.json(rows);
+  } catch (e) {
+    console.error('Événements admin:', e);
+    res.status(500).json({ message: 'Impossible de charger les événements.' });
+  }
+});
+
+app.post('/api/admin/events', requireAdmin, async (req, res) => {
+  const title = cleanText(req.body?.title, 140);
+  const summary = cleanText(req.body?.summary, 3000);
+  const imagePath = cleanText(req.body?.imagePath, 500) || null;
+  const recurrence = cleanText(req.body?.recurrenceLabel, 120) || null;
+  const sortOrder = Number.isFinite(Number(req.body?.sortOrder)) ? Number(req.body.sortOrder) : 0;
+  const slug = adminSlug(req.body?.slug || title, 'evenement') + '-' + crypto.randomBytes(3).toString('hex');
+  if (title.length < 2) return res.status(400).json({ message: 'Titre obligatoire.' });
+
+  try {
+    const r = await query(`INSERT INTO events(
+      title,slug,summary,image_path,event_date,recurrence_label,status,featured,sort_order
+    ) VALUES(?,?,?,?,?,?,?,?,?)`, [
+      title, slug, summary, imagePath, req.body?.eventDate || null, recurrence,
+      ['draft','published','archived'].includes(req.body?.status) ? req.body.status : 'published',
+      req.body?.featured ? 1 : 0, sortOrder
+    ]);
+    const { rows } = await query('SELECT * FROM events WHERE id=?', [r.insertId]);
+    await audit(req, 'event.create', 'event', r.insertId);
+    res.status(201).json(rows[0]);
+  } catch (e) {
+    console.error('Création événement:', e);
+    res.status(500).json({ message: 'Création de l’événement impossible.' });
+  }
+});
+
+app.patch('/api/admin/events/:id', requireAdmin, async (req, res) => {
+  try {
+    const currentResult = await query('SELECT * FROM events WHERE id=? LIMIT 1', [req.params.id]);
+    const current = currentResult.rows[0];
+    if (!current) return res.status(404).json({ message: 'Événement introuvable.' });
+
+    const title = cleanText(req.body?.title ?? current.title, 140);
+    const summary = cleanText(req.body?.summary ?? current.summary, 3000);
+    const imagePath = req.body?.imagePath === undefined
+      ? current.image_path
+      : (cleanText(req.body.imagePath, 500) || null);
+    const recurrence = req.body?.recurrenceLabel === undefined
+      ? current.recurrence_label
+      : (cleanText(req.body.recurrenceLabel, 120) || null);
+    const status = ['draft','published','archived'].includes(req.body?.status)
+      ? req.body.status : current.status;
+    const sortOrder = Number.isFinite(Number(req.body?.sortOrder))
+      ? Number(req.body.sortOrder) : Number(current.sort_order || 0);
+
+    if (title.length < 2) return res.status(400).json({ message: 'Titre obligatoire.' });
+
+    await query(`UPDATE events SET title=?,summary=?,image_path=?,event_date=?,recurrence_label=?,
+      status=?,featured=?,sort_order=?,updated_at=NOW() WHERE id=?`, [
+      title, summary, imagePath,
+      req.body?.eventDate === undefined ? current.event_date : (req.body.eventDate || null),
+      recurrence, status,
+      req.body?.featured === undefined ? Number(current.featured) : (req.body.featured ? 1 : 0),
+      sortOrder, req.params.id
+    ]);
+
+    if (current.image_path && current.image_path !== imagePath) {
+      await safeDeleteBlob(current.image_path);
+    }
+
+    const { rows } = await query('SELECT * FROM events WHERE id=?', [req.params.id]);
+    await audit(req, 'event.update', 'event', req.params.id);
+    res.json(rows[0]);
+  } catch (e) {
+    console.error('Modification événement:', e);
+    res.status(500).json({ message: 'Modification de l’événement impossible.' });
+  }
+});
+
+app.delete('/api/admin/events/:id', requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await query('SELECT image_path FROM events WHERE id=? LIMIT 1', [req.params.id]);
+    const event = rows[0];
+    if (!event) return res.status(404).json({ message: 'Événement introuvable.' });
+
+    await query('DELETE FROM events WHERE id=?', [req.params.id]);
+    await safeDeleteBlob(event.image_path);
+    await audit(req, 'event.delete', 'event', req.params.id);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('Suppression événement:', e);
+    res.status(500).json({ message: 'Suppression de l’événement impossible.' });
+  }
+});
 
 app.use('/api', (_req,res)=>res.status(404).json({message:'Endpoint introuvable.'}));
 

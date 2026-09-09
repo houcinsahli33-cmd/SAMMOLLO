@@ -4,30 +4,39 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow,noarchive,nosnippet">
+  <meta name="theme-color" content="#0b0d0f">
   <title>SAMMOLLO | Administration</title>
-  <link rel="icon" type="image/png" href="/image/logorestaurant.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/assets/css/admin.css">
 </head>
 <body>
-
+  <!-- =====================================================
+       CONNEXION
+  ====================================================== -->
   <section id="loginPanel" class="auth-screen" aria-labelledby="loginTitle">
     <div class="auth-glow auth-glow-one"></div>
     <div class="auth-glow auth-glow-two"></div>
-    <a class="auth-back" href="/index.html">← Retour au site</a>
+
+    <a class="auth-back" href="/index.html">
+      <span aria-hidden="true">←</span>
+      <span>Retour au site</span>
+    </a>
 
     <div class="auth-card">
       <div class="auth-brand">
         <img src="/image/logorestaurant.png" alt="Logo SAMMOLLO">
-        <div><strong>SAMMOLLO</strong><span>ESPACE ADMINISTRATION</span></div>
+        <div>
+          <strong>SAMMOLLO</strong>
+          <span>ESPACE ADMINISTRATION</span>
+        </div>
       </div>
 
       <div class="auth-copy">
         <p class="kicker">ACCÈS PRIVÉ</p>
-        <h1 id="loginTitle">Bienvenue dans le back-office</h1>
-        <p>Connectez-vous pour gérer les commandes, paiements, messages, produits et événements.</p>
+        <h1 id="loginTitle">Gérez SAMMOLLO depuis un seul espace</h1>
+        <p>Commandes, messages, carte, catégories et événements : tout le contenu utile du restaurant est centralisé ici.</p>
       </div>
 
       <form id="loginForm" class="auth-form" novalidate>
@@ -45,176 +54,391 @@
         <div class="field-control password-control">
           <span class="field-icon lock-icon" aria-hidden="true">●</span>
           <input id="adminPassword" name="password" type="password" autocomplete="current-password" placeholder="Votre mot de passe" required>
-          <button id="togglePassword" class="password-toggle" type="button" aria-label="Afficher le mot de passe" aria-pressed="false"><span aria-hidden="true">◉</span></button>
+          <button id="togglePassword" class="password-toggle" type="button" aria-label="Afficher le mot de passe" aria-pressed="false">◉</button>
         </div>
 
-        <button id="loginSubmit" class="admin-btn auth-submit" type="submit"><span>Se connecter</span><span aria-hidden="true">→</span></button>
+        <button id="loginSubmit" class="admin-btn auth-submit" type="submit">
+          <span>Se connecter</span>
+          <span aria-hidden="true">→</span>
+        </button>
         <p class="form-message" id="loginStatus" role="status" aria-live="polite"></p>
       </form>
 
-      <div class="auth-security"><span class="security-dot"></span><span>Accès protégé · Session administrateur sécurisée</span></div>
+      <div class="auth-security">
+        <span class="security-dot"></span>
+        <span>Session administrateur sécurisée</span>
+      </div>
     </div>
   </section>
 
+  <!-- =====================================================
+       APPLICATION ADMIN
+  ====================================================== -->
   <div id="appPanel" class="admin-shell" hidden>
-    <aside class="admin-side">
+    <div id="sideOverlay" class="side-overlay" hidden></div>
+
+    <aside id="adminSidebar" class="admin-side" aria-label="Navigation administration">
       <div class="admin-brand">
         <img src="/image/logorestaurant.png" alt="Logo SAMMOLLO">
-        <div><strong>SAMMOLLO</strong><small>BACK-OFFICE</small></div>
+        <div>
+          <strong>SAMMOLLO</strong>
+          <small>BACK-OFFICE</small>
+        </div>
       </div>
 
       <div class="side-group">
         <div class="side-section-label">GESTION</div>
-        <nav aria-label="Gestion administration">
-          <button class="side-link active" data-view="dashboard" type="button"><span class="nav-mark">01</span><span>Tableau de bord</span></button>
-          <button class="side-link" data-view="orders" type="button"><span class="nav-mark">02</span><span>Commandes</span><b id="pendingOrderDot" class="nav-badge" hidden>0</b></button>
-          <button class="side-link" data-view="payments" type="button"><span class="nav-mark">03</span><span>Paiements</span></button>
-          <button class="side-link" data-view="messages" type="button"><span class="nav-mark">04</span><span>Messages</span><b id="newMessageDot" class="nav-badge" hidden>0</b></button>
+        <nav>
+          <button class="side-link active" data-view="dashboard" type="button">
+            <span class="nav-icon">⌂</span><span class="nav-copy">Tableau de bord</span><span class="nav-index">01</span>
+          </button>
+          <button class="side-link" data-view="orders" type="button">
+            <span class="nav-icon">▣</span><span class="nav-copy">Commandes</span><b id="pendingOrderDot" class="nav-badge" hidden>0</b><span class="nav-index">02</span>
+          </button>
+          <button class="side-link" data-view="messages" type="button">
+            <span class="nav-icon">✉</span><span class="nav-copy">Messages</span><b id="newMessageDot" class="nav-badge" hidden>0</b><span class="nav-index">03</span>
+          </button>
         </nav>
       </div>
 
-      <div class="side-group side-group-content">
+      <div class="side-group">
         <div class="side-section-label">CONTENU</div>
-        <nav aria-label="Contenu administration">
-          <button class="side-link" data-view="menu" type="button"><span class="nav-mark">05</span><span>Carte &amp; produits</span></button>
-          <button class="side-link" data-view="events" type="button"><span class="nav-mark">06</span><span>Événements</span></button>
+        <nav>
+          <button class="side-link" data-view="menu" type="button">
+            <span class="nav-icon">◇</span><span class="nav-copy">Carte &amp; produits</span><span class="nav-index">04</span>
+          </button>
+          <button class="side-link" data-view="categories" type="button">
+            <span class="nav-icon">⊞</span><span class="nav-copy">Catégories</span><span class="nav-index">05</span>
+          </button>
+          <button class="side-link" data-view="events" type="button">
+            <span class="nav-icon">☆</span><span class="nav-copy">Événements</span><span class="nav-index">06</span>
+          </button>
         </nav>
       </div>
 
-      <div class="side-group side-group-account">
+      <div class="side-group">
         <div class="side-section-label">COMPTE</div>
-        <nav aria-label="Compte administrateur">
-          <button class="side-link" data-view="profile" type="button"><span class="nav-mark">07</span><span>Profil</span></button>
+        <nav>
+          <button class="side-link" data-view="profile" type="button">
+            <span class="nav-icon">◎</span><span class="nav-copy">Profil</span><span class="nav-index">07</span>
+          </button>
         </nav>
       </div>
 
       <div class="side-bottom">
-        <a href="/index.html"><span>←</span><span>Voir le site</span></a>
-        <button id="logoutBtn" class="logout-link" type="button"><span>↪</span><span>Déconnexion</span></button>
+        <a href="/index.html" class="side-action side-action-site">
+          <span class="side-action-icon">←</span>
+          <span class="side-action-copy">
+            <strong>Retour au site</strong>
+            <small>Voir SAMMOLLO</small>
+          </span>
+        </a>
+
+        <button id="logoutBtn" class="side-action side-action-logout" type="button">
+          <span class="side-action-icon">↪</span>
+          <span class="side-action-copy">
+            <strong>Déconnexion</strong>
+            <small>Fermer la session</small>
+          </span>
+        </button>
       </div>
     </aside>
 
     <main class="admin-main">
       <header class="admin-top">
-        <div class="admin-heading">
-          <p class="kicker">SAMMOLLO · ADMINISTRATION</p>
-          <h1 id="viewTitle">Tableau de bord</h1>
-          <p class="top-subtitle" id="viewSubtitle">Vue générale de l'activité du restaurant.</p>
+        <div class="admin-heading-wrap">
+          <button id="mobileMenuBtn" class="mobile-menu-btn" type="button" aria-label="Ouvrir le menu">☰</button>
+          <div class="admin-heading">
+            <p class="kicker">SAMMOLLO · ADMINISTRATION</p>
+            <h1 id="viewTitle">Tableau de bord</h1>
+            <p class="top-subtitle" id="viewSubtitle">Vue générale de l’activité du restaurant.</p>
+          </div>
         </div>
 
         <div class="top-actions">
-          <div class="top-clock" aria-label="Date actuelle"><span id="adminDate">—</span><small id="adminTime">—</small></div>
+          <div class="top-clock" aria-label="Date actuelle">
+            <span id="adminDate">—</span>
+            <small id="adminTime">—</small>
+          </div>
+
           <button id="profileShortcut" class="admin-profile" type="button" aria-label="Ouvrir mon profil">
             <div class="admin-avatar">S</div>
-            <div class="admin-profile-copy"><span class="admin-profile-status"><i></i> Connecté</span><strong id="adminName">Administrateur</strong></div>
+            <div class="admin-profile-copy">
+              <span class="admin-profile-status"><i></i> Connecté</span>
+              <strong id="adminName">Administrateur</strong>
+            </div>
           </button>
         </div>
       </header>
 
       <section id="metricsPanel" class="metrics" aria-label="Indicateurs">
-        <article class="metric-card metric-message"><span class="metric-index">01</span><span class="metric-icon" aria-hidden="true">✉</span><p>Nouveaux messages</p><strong id="metricMessages">—</strong><small>Demandes à consulter</small></article>
-        <article class="metric-card metric-order"><span class="metric-index">02</span><span class="metric-icon" aria-hidden="true">▣</span><p>Commandes en attente</p><strong id="metricOrders">—</strong><small>Demandes à confirmer</small></article>
-        <article class="metric-card metric-revenue"><span class="metric-index">03</span><span class="metric-icon metric-icon-text" aria-hidden="true">DA</span><p>CA payé aujourd’hui</p><strong id="metricRevenue">—</strong><small>Chiffre d’affaires encaissé</small></article>
-        <article class="metric-card metric-product"><span class="metric-index">04</span><span class="metric-icon" aria-hidden="true">◇</span><p>Produits disponibles</p><strong id="metricItems">—</strong><small>Actuellement sur la carte</small></article>
+        <article class="metric-card">
+          <span class="metric-icon">▣</span>
+          <p>Commandes aujourd’hui</p>
+          <strong id="metricTodayOrders">—</strong>
+          <small>Créées depuis minuit</small>
+        </article>
+        <article class="metric-card">
+          <span class="metric-icon">⌛</span>
+          <p>À traiter</p>
+          <strong id="metricOrders">—</strong>
+          <small>Commandes en attente</small>
+        </article>
+        <article class="metric-card">
+          <span class="metric-icon">✉</span>
+          <p>Nouveaux messages</p>
+          <strong id="metricMessages">—</strong>
+          <small>Demandes non lues</small>
+        </article>
+        <article class="metric-card">
+          <span class="metric-icon">◇</span>
+          <p>Produits disponibles</p>
+          <strong id="metricItems">—</strong>
+          <small>Actuellement sur la carte</small>
+        </article>
       </section>
 
       <section class="admin-card" id="contentCard">
         <div class="card-head">
-          <div><p class="kicker" id="contentKicker">ACTIVITÉ</p><h2 id="contentTitle">Vue d’ensemble</h2></div>
+          <div>
+            <p class="kicker" id="contentKicker">ACTIVITÉ</p>
+            <h2 id="contentTitle">Centre de contrôle</h2>
+          </div>
+
           <div class="card-head-actions">
-            <button id="openProductModal" class="admin-btn product-add-btn" type="button" hidden>+ Ajouter un produit</button>
-            <button class="secondary-btn refresh-btn" id="refreshBtn" type="button"><span aria-hidden="true">↻</span> Actualiser</button>
+            <button id="primaryActionBtn" class="admin-btn compact-btn" type="button" hidden>+ Ajouter</button>
+            <button class="secondary-btn refresh-btn" id="refreshBtn" type="button"><span>↻</span> Actualiser</button>
           </div>
         </div>
-        <div id="viewContent" class="table-wrap"><p class="empty">Chargement…</p></div>
+
+        <div id="viewContent" class="view-content">
+          <div class="loading-state"><span></span><p>Chargement…</p></div>
+        </div>
       </section>
     </main>
   </div>
 
+  <!-- =====================================================
+       MODALES
+  ====================================================== -->
   <div id="logoutModal" class="dialog-backdrop" hidden>
-    <section class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="logoutTitle">
+    <section class="dialog-card dialog-small" role="dialog" aria-modal="true" aria-labelledby="logoutTitle">
       <button id="logoutClose" class="dialog-close" type="button" aria-label="Fermer">×</button>
-      <div class="dialog-icon" aria-hidden="true">↪</div>
+      <div class="dialog-symbol danger-symbol">↪</div>
       <p class="kicker">CONFIRMATION</p>
       <h2 id="logoutTitle">Se déconnecter ?</h2>
-      <p>Votre session d’administration sera fermée. Vous devrez saisir vos identifiants pour revenir.</p>
-      <div class="dialog-actions"><button id="cancelLogout" class="secondary-btn" type="button">Annuler</button><button id="confirmLogout" class="danger-btn" type="button">Se déconnecter</button></div>
+      <p class="dialog-description">Votre session d’administration sera fermée. Vous devrez saisir vos identifiants pour revenir.</p>
+      <div class="dialog-actions">
+        <button id="cancelLogout" class="secondary-btn" type="button">Annuler</button>
+        <button id="confirmLogout" class="danger-btn" type="button">Se déconnecter</button>
+      </div>
     </section>
   </div>
 
   <div id="credentialsModal" class="dialog-backdrop" hidden>
-    <section class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="credentialsTitle">
+    <section class="dialog-card dialog-small" role="dialog" aria-modal="true" aria-labelledby="credentialsTitle">
       <button id="credentialsClose" class="dialog-close" type="button" aria-label="Fermer">×</button>
-      <div class="dialog-icon neutral" aria-hidden="true">?</div>
+      <div class="dialog-symbol">?</div>
       <p class="kicker">ACCÈS ADMIN</p>
       <h2 id="credentialsTitle">Identifiants oubliés ?</h2>
-      <p>Les identifiants initiaux sont configurés côté serveur. Une fois connecté, vous pourrez gérer votre nom, votre email et votre mot de passe depuis la rubrique Profil.</p>
-      <div class="dialog-actions one"><button id="credentialsOk" class="secondary-btn" type="button">J’ai compris</button></div>
+      <p class="dialog-description">Pour des raisons de sécurité, la récupération n’est pas affichée publiquement. Le propriétaire du projet doit réinitialiser les identifiants depuis l’environnement serveur.</p>
+      <div class="dialog-actions one">
+        <button id="credentialsOk" class="secondary-btn" type="button">J’ai compris</button>
+      </div>
     </section>
   </div>
 
   <div id="orderDetailModal" class="dialog-backdrop" hidden>
-    <section class="dialog-card order-dialog" role="dialog" aria-modal="true" aria-labelledby="orderDetailTitle">
+    <section class="dialog-card dialog-wide" role="dialog" aria-modal="true" aria-labelledby="orderDetailTitle">
       <button id="orderDetailClose" class="dialog-close" type="button" aria-label="Fermer">×</button>
       <p class="kicker">COMMANDE</p>
       <h2 id="orderDetailTitle">Détails de la commande</h2>
-      <div id="orderDetailBody" class="order-detail-body"><p class="empty">Chargement…</p></div>
+      <div id="orderDetailBody" class="modal-body"><div class="loading-state"><span></span><p>Chargement…</p></div></div>
+    </section>
+  </div>
+
+  <div id="messageModal" class="dialog-backdrop" hidden>
+    <section class="dialog-card dialog-medium" role="dialog" aria-modal="true" aria-labelledby="messageTitle">
+      <button id="messageClose" class="dialog-close" type="button" aria-label="Fermer">×</button>
+      <p class="kicker">MESSAGE CLIENT</p>
+      <h2 id="messageTitle">Message</h2>
+      <div id="messageBody" class="modal-body"></div>
     </section>
   </div>
 
   <div id="productModal" class="dialog-backdrop" hidden>
-    <section class="dialog-card product-dialog" role="dialog" aria-modal="true" aria-labelledby="productModalTitle">
+    <section class="dialog-card dialog-form" role="dialog" aria-modal="true" aria-labelledby="productModalTitle">
       <button id="productModalClose" class="dialog-close" type="button" aria-label="Fermer">×</button>
       <p class="kicker">CARTE SAMMOLLO</p>
       <h2 id="productModalTitle">Ajouter un produit</h2>
-      <p class="dialog-description">Ajoutez un nouveau produit à la carte du restaurant.</p>
+      <p class="dialog-description" id="productModalDescription">Créez un produit et publiez-le directement sur la carte.</p>
 
-      <form id="productForm" class="product-form">
-        <div class="product-form-grid">
-          <div class="product-field">
+      <form id="productForm" class="entity-form">
+        <input id="productId" type="hidden">
+        <input id="productCurrentImage" type="hidden">
+
+        <div class="form-grid">
+          <div class="form-field">
             <label for="productCategory">Catégorie *</label>
-            <select id="productCategory" required><option value="">Sélectionner une catégorie</option></select>
+            <select id="productCategory" required></select>
           </div>
-
-          <div class="product-field">
-            <label for="productName">Nom du produit *</label>
-            <input id="productName" type="text" maxlength="120" placeholder="Ex. Pizza 4 Fromages" required>
+          <div class="form-field">
+            <label for="productName">Nom *</label>
+            <input id="productName" type="text" maxlength="120" placeholder="Ex. Pizza Quatre Fromages" required>
           </div>
-
-          <div class="product-field product-field-full">
+          <div class="form-field form-field-full">
             <label for="productDescription">Description</label>
-            <textarea id="productDescription" rows="4" maxlength="2000" placeholder="Mozzarella, fromage, sauce tomate..."></textarea>
+            <textarea id="productDescription" rows="4" maxlength="2000" placeholder="Description du produit…"></textarea>
           </div>
-
-          <div class="product-field">
+          <div class="form-field">
             <label for="productPrice">Prix (DA) *</label>
-            <input id="productPrice" type="number" min="0" step="1" placeholder="1400" required>
+            <input id="productPrice" type="number" min="0" step="1" required>
           </div>
-
-          <div class="product-field">
-            <label class="product-availability"><input id="productAvailable" type="checkbox" checked><span>Produit disponible</span></label>
+          <div class="form-field">
+            <label for="productBadge">Badge</label>
+            <input id="productBadge" type="text" maxlength="40" placeholder="Populaire, Chef…">
           </div>
-
-          <div class="product-field product-field-full">
-            <label for="productImage">Photo du produit *</label>
-            <div class="product-upload-box">
-              <input id="productImage" type="file" accept="image/jpeg,image/png,image/webp" required>
-              <div id="productImagePreview" class="product-image-preview"><span>Aucune photo sélectionnée</span></div>
-              <small>JPG, PNG ou WebP · maximum 5 Mo</small>
+          <div class="form-field">
+            <label for="productSortOrder">Ordre d’affichage</label>
+            <input id="productSortOrder" type="number" step="1" value="0">
+          </div>
+          <div class="form-field toggles-field">
+            <label>Publication</label>
+            <label class="switch-row"><input id="productAvailable" type="checkbox" checked><span class="switch"></span><span>Disponible</span></label>
+            <label class="switch-row"><input id="productFeatured" type="checkbox"><span class="switch"></span><span>Mis en avant</span></label>
+          </div>
+          <div class="form-field form-field-full">
+            <label for="productImage">Photo</label>
+            <div class="upload-panel">
+              <div id="productImagePreview" class="upload-preview"><span>Aucune photo</span></div>
+              <div class="upload-copy">
+                <input id="productImage" type="file" accept="image/jpeg,image/png,image/webp">
+                <small>JPG, PNG ou WebP · maximum 4 Mo</small>
+              </div>
             </div>
           </div>
         </div>
 
-        <input id="productImageUrl" type="hidden">
         <p id="productFormStatus" class="form-message" role="status" aria-live="polite"></p>
-
-        <div class="dialog-actions product-actions">
+        <div class="dialog-actions">
           <button id="cancelProduct" class="secondary-btn" type="button">Annuler</button>
-          <button id="saveProduct" class="admin-btn" type="submit">+ Ajouter le produit</button>
+          <button id="saveProduct" class="admin-btn" type="submit">Ajouter le produit</button>
         </div>
       </form>
     </section>
   </div>
+
+  <div id="categoryModal" class="dialog-backdrop" hidden>
+    <section class="dialog-card dialog-medium" role="dialog" aria-modal="true" aria-labelledby="categoryModalTitle">
+      <button id="categoryModalClose" class="dialog-close" type="button" aria-label="Fermer">×</button>
+      <p class="kicker">CATÉGORIES</p>
+      <h2 id="categoryModalTitle">Ajouter une catégorie</h2>
+      <p class="dialog-description">Organisez la carte sans modifier le code du site.</p>
+
+      <form id="categoryForm" class="entity-form">
+        <input id="categoryId" type="hidden">
+        <div class="form-grid">
+          <div class="form-field form-field-full">
+            <label for="categoryName">Nom *</label>
+            <input id="categoryName" type="text" maxlength="80" placeholder="Ex. Sandwichs" required>
+          </div>
+          <div class="form-field">
+            <label for="categorySortOrder">Ordre d’affichage</label>
+            <input id="categorySortOrder" type="number" step="1" value="0">
+          </div>
+          <div class="form-field toggles-field">
+            <label>État</label>
+            <label class="switch-row"><input id="categoryActive" type="checkbox" checked><span class="switch"></span><span>Catégorie active</span></label>
+          </div>
+        </div>
+        <p id="categoryFormStatus" class="form-message" role="status" aria-live="polite"></p>
+        <div class="dialog-actions">
+          <button id="cancelCategory" class="secondary-btn" type="button">Annuler</button>
+          <button id="saveCategory" class="admin-btn" type="submit">Ajouter la catégorie</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <div id="eventModal" class="dialog-backdrop" hidden>
+    <section class="dialog-card dialog-form" role="dialog" aria-modal="true" aria-labelledby="eventModalTitle">
+      <button id="eventModalClose" class="dialog-close" type="button" aria-label="Fermer">×</button>
+      <p class="kicker">ÉVÉNEMENTS</p>
+      <h2 id="eventModalTitle">Ajouter un événement</h2>
+      <p class="dialog-description">Créez, planifiez et publiez un événement sur le site.</p>
+
+      <form id="eventForm" class="entity-form">
+        <input id="eventId" type="hidden">
+        <input id="eventCurrentImage" type="hidden">
+
+        <div class="form-grid">
+          <div class="form-field form-field-full">
+            <label for="eventTitle">Titre *</label>
+            <input id="eventTitle" type="text" maxlength="140" required>
+          </div>
+          <div class="form-field form-field-full">
+            <label for="eventSummary">Description</label>
+            <textarea id="eventSummary" rows="4" maxlength="3000"></textarea>
+          </div>
+          <div class="form-field">
+            <label for="eventDate">Date et heure</label>
+            <input id="eventDate" type="datetime-local">
+          </div>
+          <div class="form-field">
+            <label for="eventRecurrence">Récurrence / indication</label>
+            <input id="eventRecurrence" type="text" maxlength="120" placeholder="Chaque vendredi, Sur réservation…">
+          </div>
+          <div class="form-field">
+            <label for="eventStatus">Statut</label>
+            <select id="eventStatus">
+              <option value="published">Publié</option>
+              <option value="draft">Brouillon</option>
+              <option value="archived">Archivé</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label for="eventSortOrder">Ordre d’affichage</label>
+            <input id="eventSortOrder" type="number" step="1" value="0">
+          </div>
+          <div class="form-field toggles-field form-field-full">
+            <label class="switch-row"><input id="eventFeatured" type="checkbox"><span class="switch"></span><span>Mettre cet événement en avant</span></label>
+          </div>
+          <div class="form-field form-field-full">
+            <label for="eventImage">Photo</label>
+            <div class="upload-panel">
+              <div id="eventImagePreview" class="upload-preview"><span>Aucune photo</span></div>
+              <div class="upload-copy">
+                <input id="eventImage" type="file" accept="image/jpeg,image/png,image/webp">
+                <small>JPG, PNG ou WebP · maximum 4 Mo</small>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <p id="eventFormStatus" class="form-message" role="status" aria-live="polite"></p>
+        <div class="dialog-actions">
+          <button id="cancelEvent" class="secondary-btn" type="button">Annuler</button>
+          <button id="saveEvent" class="admin-btn" type="submit">Ajouter l’événement</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <div id="confirmModal" class="dialog-backdrop" hidden>
+    <section class="dialog-card dialog-small" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+      <button id="confirmClose" class="dialog-close" type="button" aria-label="Fermer">×</button>
+      <div id="confirmSymbol" class="dialog-symbol danger-symbol">!</div>
+      <p class="kicker">CONFIRMATION</p>
+      <h2 id="confirmTitle">Confirmer l’action ?</h2>
+      <p id="confirmMessage" class="dialog-description"></p>
+      <div class="dialog-actions">
+        <button id="confirmCancel" class="secondary-btn" type="button">Annuler</button>
+        <button id="confirmAccept" class="danger-btn" type="button">Confirmer</button>
+      </div>
+    </section>
+  </div>
+
+  <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
 
   <script src="/assets/js/admin.js"></script>
 </body>
