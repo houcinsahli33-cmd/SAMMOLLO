@@ -42,7 +42,8 @@
   const viewMeta={
     dashboard:{title:'Tableau de bord',subtitle:'Vue générale et actions prioritaires du restaurant.',kicker:'ACTIVITÉ',content:'Centre de contrôle'},
     orders:{title:'Commandes',subtitle:'Confirmez, préparez et clôturez les commandes clients.',kicker:'GESTION',content:'Commandes clients'},
-    messages:{title:'Messages',subtitle:'Consultez, classez et supprimez les demandes reçues.',kicker:'CONTACT',content:'Messages reçus'},
+    messages:{title:'Messages',subtitle:'Consultez les demandes et répondez directement aux clients depuis SAMMOLLO.',kicker:'CONTACT',content:'Messages reçus'},
+    contact:{title:'Contact & informations',subtitle:'Modifiez les coordonnées, horaires, localisation et réseaux sociaux affichés sur le site.',kicker:'CONTACT',content:'Informations publiques'},
     menu:{title:'Carte & produits',subtitle:'Ajoutez, modifiez, publiez et supprimez les produits de la carte.',kicker:'CARTE',content:'Produits du menu'},
     categories:{title:'Catégories',subtitle:'Organisez les familles de produits et leur ordre d’affichage.',kicker:'CARTE',content:'Catégories du menu'},
     events:{title:'Événements',subtitle:'Créez, modifiez, publiez ou archivez les événements.',kicker:'CONTENU',content:'Événements SAMMOLLO'},
@@ -307,6 +308,7 @@
       if(view==='dashboard')return await renderDashboard();
       if(view==='orders')return await renderOrders();
       if(view==='messages')return await renderMessages();
+      if(view==='contact')return await renderContactSettings();
       if(view==='menu')return await renderProducts();
       if(view==='categories')return await renderCategories();
       if(view==='events')return await renderEvents();
@@ -519,8 +521,8 @@
         <div class="message-avatar">${esc(initials(m.name))}</div>
         <div class="message-who"><strong>${esc(m.name)}</strong><small>${esc(m.email)}</small></div>
         <div class="message-subject"><strong>${esc(m.subject)}</strong><small>${esc(m.message).slice(0,105)}</small></div>
-        ${statusBadge(messageLabels[m.status]||m.status,messageTone(m.status))}
-        <div class="message-actions"><button class="mini-btn" data-message-open="${m.id}" type="button">Ouvrir</button><button class="mini-btn danger" data-message-delete="${m.id}" type="button">Supprimer</button></div>
+        <div class="message-state-wrap">${statusBadge(messageLabels[m.status]||m.status,messageTone(m.status))}${Number(m.reply_count||0)?`<small>${Number(m.reply_count)} réponse${Number(m.reply_count)>1?'s':''}</small>`:''}</div>
+        <div class="message-actions"><button class="mini-btn" data-message-open="${m.id}" type="button">Ouvrir & répondre</button><button class="mini-btn danger" data-message-delete="${m.id}" type="button">Supprimer</button></div>
       </div>`).join('');
 
     $$('[data-message-open]',viewContent).forEach(btn=>btn.addEventListener('click',()=>openMessage(btn.dataset.messageOpen)));
@@ -530,26 +532,103 @@
   async function openMessage(id){
     const m=messagesCache.find(x=>x.id===Number(id));
     if(!m)return;
+
     $('#messageTitle').textContent=m.subject||'Message';
+    $('#messageBody').innerHTML='<div class="loading-state"><span></span><p>Chargement du message…</p></div>';
+    openModal(messageModal);
+
+    let replies=[];
+    try{replies=await api(`/api/admin/messages/${m.id}/replies`);}catch{}
+
     $('#messageBody').innerHTML=`
       <div class="message-detail-head">
         <div class="detail-box"><span>Expéditeur</span><strong>${esc(m.name)}</strong></div>
-        <div class="detail-box"><span>Email</span><strong>${esc(m.email)}</strong></div>
+        <div class="detail-box"><span>Email vérifié</span><strong>${esc(m.email)}</strong></div>
         <div class="detail-box"><span>Reçu le</span><strong>${dt(m.created_at)}</strong></div>
-        <div class="detail-box"><span>Statut</span><strong>${esc(messageLabels[m.status]||m.status)}</strong></div>
+        <div class="detail-box"><span>Statut</span><strong id="messageDetailStatus">${esc(messageLabels[m.status]||m.status)}</strong></div>
       </div>
-      <div class="message-text">${esc(m.message)}</div>
-      <div class="dialog-actions">
-        <a class="secondary-btn" style="display:grid;place-items:center;text-decoration:none" href="mailto:${encodeURIComponent(m.email)}?subject=${encodeURIComponent('Re: '+m.subject)}">Répondre par email</a>
-        <select id="messageModalStatus" class="status-select">${Object.entries(messageLabels).map(([k,v])=>`<option value="${k}" ${m.status===k?'selected':''}>${esc(v)}</option>`).join('')}</select>
-      </div>`;
-    openModal(messageModal);
+
+      <section class="message-original">
+        <div class="message-section-head"><div><span>MESSAGE DU CLIENT</span><h3>${esc(m.subject||'Sans objet')}</h3></div></div>
+        <div class="message-text">${esc(m.message)}</div>
+      </section>
+
+      <section class="reply-history-panel">
+        <div class="message-section-head">
+          <div><span>HISTORIQUE</span><h3>Réponses envoyées</h3></div>
+          <small>${replies.length} réponse${replies.length>1?'s':''}</small>
+        </div>
+        <div id="replyHistory" class="reply-history">
+          ${renderReplyHistory(replies)}
+        </div>
+      </section>
+
+      <section class="reply-composer">
+        <div class="message-section-head"><div><span>RÉPONDRE DEPUIS SAMMOLLO</span><h3>Réponse au client</h3></div></div>
+        <label class="reply-label" for="messageReplyText">Votre réponse</label>
+        <textarea id="messageReplyText" rows="6" maxlength="5000" placeholder="Bonjour ${esc(m.name)},\n\nMerci pour votre message…"></textarea>
+        <div class="reply-helper"><span>La réponse sera envoyée par l’adresse email SAMMOLLO configurée dans Brevo.</span><span id="replyCharCount">0 / 5000</span></div>
+        <p id="messageReplyStatus" class="form-message" role="status" aria-live="polite"></p>
+        <div class="reply-actions">
+          <select id="messageModalStatus" class="status-select">${Object.entries(messageLabels).map(([k,v])=>`<option value="${k}" ${m.status===k?'selected':''}>${esc(v)}</option>`).join('')}</select>
+          <button id="sendMessageReply" class="admin-btn" type="button"><span>Envoyer la réponse</span><span>→</span></button>
+        </div>
+      </section>`;
+
     if(m.status==='new'){
-      try{await updateMessageStatus(m.id,'read',false);m.status='read';}catch{}
+      try{await updateMessageStatus(m.id,'read',false);m.status='read';$('#messageDetailStatus').textContent='Lu';$('#messageModalStatus').value='read';}catch{}
     }
+
+    const textarea=$('#messageReplyText');
+    textarea.addEventListener('input',()=>{$('#replyCharCount').textContent=`${textarea.value.length} / 5000`;});
     $('#messageModalStatus').addEventListener('change',async e=>{
-      try{await updateMessageStatus(m.id,e.target.value,true);m.status=e.target.value;drawMessages();}catch(err){toast('Modification impossible',err.message,'error');}
+      try{await updateMessageStatus(m.id,e.target.value,true);m.status=e.target.value;$('#messageDetailStatus').textContent=messageLabels[m.status]||m.status;drawMessages();}catch(err){toast('Modification impossible',err.message,'error');}
     });
+    $('#sendMessageReply').addEventListener('click',()=>sendMessageReply(m));
+  }
+
+  function renderReplyHistory(replies){
+    if(!replies.length)return '<div class="reply-empty"><span>↩</span><p>Aucune réponse envoyée pour le moment.</p></div>';
+    return replies.map(r=>`
+      <article class="reply-item">
+        <div class="reply-item-head"><strong>${esc(r.admin_name||'Administration SAMMOLLO')}</strong><time>${dt(r.sent_at)}</time></div>
+        <p>${esc(r.reply_text).replace(/\n/g,'<br>')}</p>
+      </article>`).join('');
+  }
+
+  async function sendMessageReply(message){
+    const text=$('#messageReplyText').value.trim();
+    const status=$('#messageReplyStatus');
+    const button=$('#sendMessageReply');
+    status.className='form-message';
+    if(text.length<2){status.textContent='Écrivez une réponse avant l’envoi.';status.classList.add('error');return;}
+
+    button.disabled=true;
+    button.innerHTML='<span>Envoi en cours…</span>';
+    status.textContent='Envoi de la réponse via Brevo…';
+    try{
+      await api(`/api/admin/messages/${message.id}/reply`,{method:'POST',body:JSON.stringify({replyText:text})});
+      message.status='replied';
+      message.reply_count=Number(message.reply_count||0)+1;
+      status.textContent='Réponse envoyée au client ✓';
+      status.classList.add('success');
+      $('#messageModalStatus').value='replied';
+      $('#messageDetailStatus').textContent='Répondu';
+      $('#messageReplyText').value='';
+      $('#replyCharCount').textContent='0 / 5000';
+      const replies=await api(`/api/admin/messages/${message.id}/replies`);
+      $('#replyHistory').innerHTML=renderReplyHistory(replies);
+      drawMessages();
+      await loadMetrics();
+      toast('Réponse envoyée',`Email envoyé à ${message.email}`);
+    }catch(err){
+      status.textContent=err.message;
+      status.classList.add('error');
+      toast('Envoi impossible',err.message,'error');
+    }finally{
+      button.disabled=false;
+      button.innerHTML='<span>Envoyer la réponse</span><span>→</span>';
+    }
   }
 
   async function updateMessageStatus(id,status,notify=true){
@@ -570,6 +649,125 @@
       await loadMetrics();
       drawMessages();
     }catch(err){toast('Suppression impossible',err.message,'error');}
+  }
+
+  // =====================================================
+  // CONTACT & INFORMATIONS PUBLIQUES
+  // =====================================================
+  async function renderContactSettings(){
+    const data=await api('/api/admin/settings/contact');
+    const r=data.restaurant||{};
+    const h=data.openingHours||{};
+    const c=data.contact||{};
+
+    viewContent.innerHTML=`
+      <form id="contactSettingsForm" class="contact-settings-form">
+        <div class="settings-hero">
+          <div><span>PAGE CONTACT</span><h3>Informations visibles par vos clients</h3><p>Les changements enregistrés ici sont appliqués automatiquement sur la page Contact du site.</p></div>
+          <a class="secondary-btn settings-preview" href="/contact.html" target="_blank" rel="noopener">Voir la page Contact ↗</a>
+        </div>
+
+        <div class="settings-grid">
+          <section class="settings-card">
+            <div class="settings-card-head"><span class="settings-icon">☎</span><div><h3>Coordonnées</h3><p>Téléphone, email et adresse publique.</p></div></div>
+            <div class="form-grid">
+              <div class="form-field form-field-full"><label for="contactAddress">Adresse</label><input id="contactAddress" type="text" maxlength="260" value="${esc(c.address||'Draâ El Mizan, Tizi-Ouzou, Algérie')}"></div>
+              <div class="form-field"><label for="contactPhoneDisplay">Téléphone affiché</label><input id="contactPhoneDisplay" type="text" maxlength="40" value="${esc(c.phoneDisplay||r.phone||'0668 92 94 53')}"></div>
+              <div class="form-field"><label for="contactPhoneHref">Téléphone technique</label><input id="contactPhoneHref" type="text" maxlength="40" value="${esc(c.phoneHref||'+213668929453')}" placeholder="+213668929453"><small>Format utilisé lorsque le client clique sur le numéro.</small></div>
+              <div class="form-field form-field-full"><label for="contactEmail">Email affiché</label><input id="contactEmail" type="email" maxlength="180" value="${esc(c.email||r.email||'')}"></div>
+              <div class="form-field"><label for="contactCity">Ville</label><input id="contactCity" type="text" maxlength="100" value="${esc(r.city||'Draâ El Mizan')}"></div>
+              <div class="form-field"><label for="contactWilaya">Wilaya</label><input id="contactWilaya" type="text" maxlength="100" value="${esc(r.wilaya||'Tizi-Ouzou')}"></div>
+            </div>
+          </section>
+
+          <section class="settings-card">
+            <div class="settings-card-head"><span class="settings-icon">◷</span><div><h3>Horaires</h3><p>Modifiez les horaires affichés sur la page Contact.</p></div></div>
+            <div class="form-grid">
+              <div class="form-field form-field-full"><label for="fridayHours">Vendredi</label><input id="fridayHours" type="text" maxlength="80" value="${esc(h.friday||'14:00-01:00')}" placeholder="14:00-01:00"></div>
+              <div class="form-field form-field-full"><label for="weekHours">Samedi à jeudi</label><input id="weekHours" type="text" maxlength="80" value="${esc(h.saturday_thursday||'08:00-23:00')}" placeholder="08:00-23:00"></div>
+            </div>
+          </section>
+
+          <section class="settings-card settings-card-wide">
+            <div class="settings-card-head"><span class="settings-icon">⌖</span><div><h3>Google Maps</h3><p>Localisation, carte intégrée et bouton itinéraire.</p></div></div>
+            <div class="form-grid">
+              <div class="form-field form-field-full"><label for="contactMapEmbed">URL carte intégrée</label><input id="contactMapEmbed" type="url" value="${esc(c.mapEmbed||'')}" placeholder="https://www.google.com/maps?...&output=embed"></div>
+              <div class="form-field"><label for="contactMapUrl">Lien Google Maps</label><input id="contactMapUrl" type="url" value="${esc(c.mapUrl||'')}"></div>
+              <div class="form-field"><label for="contactDirectionsUrl">Lien itinéraire</label><input id="contactDirectionsUrl" type="url" value="${esc(c.directionsUrl||'')}"></div>
+            </div>
+          </section>
+
+          <section class="settings-card settings-card-wide">
+            <div class="settings-card-head"><span class="settings-icon">◎</span><div><h3>Réseaux sociaux</h3><p>Liens officiels affichés sur la page Contact.</p></div></div>
+            <div class="form-grid">
+              <div class="form-field"><label for="contactFacebook">Facebook</label><input id="contactFacebook" type="url" value="${esc(c.facebook||'')}"></div>
+              <div class="form-field"><label for="contactInstagram">Instagram</label><input id="contactInstagram" type="url" value="${esc(c.instagram||'')}"></div>
+              <div class="form-field form-field-full"><label for="contactTiktok">TikTok</label><input id="contactTiktok" type="url" value="${esc(c.tiktok||'')}" placeholder="Laissez vide si aucun lien officiel"></div>
+            </div>
+          </section>
+
+          <section class="settings-card settings-card-wide visibility-card">
+            <div class="settings-card-head"><span class="settings-icon">◉</span><div><h3>Éléments visibles</h3><p>Masquez une information sans la supprimer.</p></div></div>
+            <div class="visibility-grid">
+              ${visibilityToggle('showAddress','Afficher l’adresse',c.showAddress!==false)}
+              ${visibilityToggle('showPhone','Afficher le téléphone',c.showPhone!==false)}
+              ${visibilityToggle('showEmail','Afficher l’email',c.showEmail!==false)}
+              ${visibilityToggle('showHours','Afficher les horaires',c.showHours!==false)}
+              ${visibilityToggle('showSocial','Afficher les réseaux sociaux',c.showSocial!==false)}
+            </div>
+          </section>
+        </div>
+
+        <p id="contactSettingsStatus" class="form-message" role="status" aria-live="polite"></p>
+        <div class="settings-savebar"><div><strong>Prêt à publier ?</strong><span>Les changements seront visibles dès l’enregistrement.</span></div><button id="saveContactSettings" class="admin-btn" type="submit">Enregistrer les informations</button></div>
+      </form>`;
+
+    $('#contactSettingsForm').addEventListener('submit',saveContactSettings);
+  }
+
+  function visibilityToggle(id,label,checked){
+    return `<label class="visibility-toggle"><input id="${id}" type="checkbox" ${checked?'checked':''}><span class="switch"></span><span>${esc(label)}</span></label>`;
+  }
+
+  async function saveContactSettings(e){
+    e.preventDefault();
+    const form=e.currentTarget;
+    const button=$('#saveContactSettings');
+    const status=$('#contactSettingsStatus');
+    button.disabled=true;
+    status.className='form-message';
+    status.textContent='Enregistrement des informations…';
+    try{
+      const payload={
+        address:$('#contactAddress').value.trim(),
+        phoneDisplay:$('#contactPhoneDisplay').value.trim(),
+        phoneHref:$('#contactPhoneHref').value.trim(),
+        email:$('#contactEmail').value.trim(),
+        city:$('#contactCity').value.trim(),
+        wilaya:$('#contactWilaya').value.trim(),
+        country:'Algérie',
+        fridayHours:$('#fridayHours').value.trim(),
+        weekHours:$('#weekHours').value.trim(),
+        mapEmbed:$('#contactMapEmbed').value.trim(),
+        mapUrl:$('#contactMapUrl').value.trim(),
+        directionsUrl:$('#contactDirectionsUrl').value.trim(),
+        facebook:$('#contactFacebook').value.trim(),
+        instagram:$('#contactInstagram').value.trim(),
+        tiktok:$('#contactTiktok').value.trim(),
+        showAddress:$('#showAddress').checked,
+        showPhone:$('#showPhone').checked,
+        showEmail:$('#showEmail').checked,
+        showHours:$('#showHours').checked,
+        showSocial:$('#showSocial').checked
+      };
+      await api('/api/admin/settings/contact',{method:'PATCH',body:JSON.stringify(payload)});
+      status.textContent='Informations mises à jour ✓';
+      status.classList.add('success');
+      toast('Contact mis à jour','Les nouvelles informations sont maintenant disponibles sur le site.');
+    }catch(err){
+      status.textContent=err.message;
+      status.classList.add('error');
+    }finally{button.disabled=false;}
   }
 
   // =====================================================

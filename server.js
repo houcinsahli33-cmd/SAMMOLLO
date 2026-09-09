@@ -70,9 +70,13 @@ const contactLimiter = rateLimit({ windowMs: 10 * 60 * 1000, limit: 12, standard
 const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 8, standardHeaders: true, legacyHeaders: false });
 const orderLimiter = rateLimit({ windowMs: 10 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false });
 const orderCodeLimiter = rateLimit({ windowMs: 10 * 60 * 1000, limit: 6, standardHeaders: true, legacyHeaders: false });
+const adminReplyLimiter = rateLimit({ windowMs: 60 * 60 * 1000, limit: 60, standardHeaders: true, legacyHeaders: false });
 
 function validEmail(v) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v || '').trim()); }
 function cleanText(v, max) { return String(v || '').trim().replace(/\0/g, '').slice(0, max); }
+function asBool(v, fallback = true) { if (typeof v === 'boolean') return v; if (v === 0 || v === '0' || v === 'false') return false; if (v === 1 || v === '1' || v === 'true') return true; return fallback; }
+function safeHttpUrl(v, max = 1200) { const s = cleanText(v, max); if (!s) return ''; try { const u = new URL(s); return ['http:','https:'].includes(u.protocol) ? u.toString() : ''; } catch { return ''; } }
+function parseSettingValue(value, fallback = {}) { try { const parsed = JSON.parse(value); return parsed && typeof parsed === 'object' ? parsed : fallback; } catch { return fallback; } }
 function hashCode(token, code) { return crypto.createHash('sha256').update(`${token}:${code}:${JWT_SECRET}`).digest('hex'); }
 function safeEqualHex(a, b) {
   try { const A = Buffer.from(a, 'hex'), B = Buffer.from(b, 'hex'); return A.length === B.length && crypto.timingSafeEqual(A, B); }
@@ -156,7 +160,8 @@ app.get('/api/events', async (_req, res) => {
 
 app.get('/api/settings/public', async (_req, res) => {
   try {
-    const { rows } = await query("SELECT setting_key,setting_value FROM site_settings WHERE setting_key IN ('restaurant','opening_hours')");
+    res.setHeader('Cache-Control', 'no-store');
+    const { rows } = await query("SELECT setting_key,setting_value FROM site_settings WHERE setting_key IN ('restaurant','opening_hours','contact')");
     const result = {};
     for (const r of rows) {
       try { result[r.setting_key] = JSON.parse(r.setting_value); }
@@ -838,8 +843,9 @@ app.get('/api/admin/activity', requireAdmin, async (_req, res) => {
 // ======================================================
 app.get('/api/admin/messages', requireAdmin, async (_req, res) => {
   try {
-    const { rows } = await query(`SELECT id,name,email,subject,message,status,created_at,updated_at
-      FROM contact_messages ORDER BY created_at DESC LIMIT 150`);
+    const { rows } = await query(`SELECT m.id,m.name,m.email,m.subject,m.message,m.status,m.created_at,m.updated_at,
+      (SELECT COUNT(*) FROM contact_replies r WHERE r.contact_message_id=m.id) AS reply_count
+      FROM contact_messages m ORDER BY m.created_at DESC LIMIT 150`);
     res.json(rows);
   } catch (e) {
     console.error('Messages admin:', e);
@@ -862,8 +868,79 @@ app.patch('/api/admin/messages/:id/status', requireAdmin, async (req, res) => {
   res.json({ id: Number(req.params.id), status });
 });
 
+app.get('/api/admin/messages/:id/replies', requireAdmin, async (req, res) => {
+  try {
+    const message = await query('SELECT id FROM contact_messages WHERE id=? LIMIT 1', [req.params.id]);
+    if (!message.rows.length) return res.status(404).json({ message: 'Message introuvable.' });
+
+    const { rows } = await query(`SELECT r.id,r.reply_text,r.subject,r.sent_at,r.admin_id,a.display_name AS admin_name
+      FROM contact_replies r
+      LEFT JOIN admins a ON a.id=r.admin_id
+      WHERE r.contact_message_id=?
+      ORDER BY r.sent_at ASC,r.id ASC`, [req.params.id]);
+    res.json(rows);
+  } catch (e) {
+    console.error('Historique réponses:', e);
+    res.status(500).json({ message: 'Impossible de charger les réponses.' });
+  }
+});
+
+app.post('/api/admin/messages/:id/reply', adminReplyLimiter, requireAdmin, async (req, res) => {
+  try {
+    const replyText = cleanText(req.body?.replyText, 5000);
+    if (replyText.length < 2) return res.status(400).json({ message: 'Écrivez une réponse avant l’envoi.' });
+
+    const messageResult = await query(
+      'SELECT id,name,email,subject FROM contact_messages WHERE id=? LIMIT 1',
+      [req.params.id]
+    );
+    const message = messageResult.rows[0];
+    if (!message) return res.status(404).json({ message: 'Message introuvable.' });
+    if (!validEmail(message.email)) return res.status(400).json({ message: 'Adresse email du client invalide.' });
+
+    const transport = mailTransport();
+    if (!transport) return res.status(503).json({ message: 'Le service email n’est pas configuré.' });
+
+    const subject = `Re: ${cleanText(message.subject || 'Votre message SAMMOLLO', 140)}`;
+    const safeName = escapeHtml(message.name || 'Client');
+    const safeReply = escapeHtml(replyText).replace(/\n/g, '<br>');
+
+    await transport.sendMail({
+      from: process.env.MAIL_FROM || process.env.SMTP_USER,
+      to: message.email,
+      replyTo: process.env.RESTAURANT_EMAIL || undefined,
+      subject,
+      text: `Bonjour ${message.name || ''},\n\n${replyText}\n\nSAMMOLLO Restaurant`,
+      html: `<div style="font-family:Arial,sans-serif;background:#f6f1e8;padding:28px"><div style="max-width:620px;margin:auto;background:#fff;border-radius:16px;overflow:hidden;border:1px solid #eadfc9"><div style="padding:20px 26px;background:#111315;color:#fff"><strong style="font-size:20px;letter-spacing:.08em">SAMMOLLO</strong><div style="color:#d6a33a;font-size:12px;margin-top:4px">Réponse du restaurant</div></div><div style="padding:28px 26px;color:#252525;line-height:1.65"><p>Bonjour <strong>${safeName}</strong>,</p><p>${safeReply}</p><p style="margin-top:28px">Cordialement,<br><strong>SAMMOLLO Restaurant</strong></p></div></div></div>`
+    });
+
+    const saved = await query(
+      `INSERT INTO contact_replies(contact_message_id,admin_id,recipient_email,subject,reply_text)
+       VALUES(?,?,?,?,?)`,
+      [message.id, req.admin.sub, message.email, subject, replyText]
+    );
+    await query("UPDATE contact_messages SET status='replied',updated_at=NOW() WHERE id=?", [message.id]);
+    await audit(req, 'message.reply.send', 'contact_message', message.id);
+
+    res.status(201).json({
+      ok: true,
+      reply: {
+        id: saved.insertId,
+        reply_text: replyText,
+        subject,
+        sent_at: new Date().toISOString(),
+        admin_id: req.admin.sub
+      }
+    });
+  } catch (e) {
+    console.error('Réponse message:', e);
+    res.status(500).json({ message: "Impossible d'envoyer la réponse pour le moment." });
+  }
+});
+
 app.delete('/api/admin/messages/:id', requireAdmin, async (req, res) => {
   try {
+    await query('DELETE FROM contact_replies WHERE contact_message_id=?', [req.params.id]);
     const r = await query('DELETE FROM contact_messages WHERE id=?', [req.params.id]);
     if (!r.rowCount) return res.status(404).json({ message: 'Message introuvable.' });
     await audit(req, 'message.delete', 'contact_message', req.params.id);
@@ -871,6 +948,86 @@ app.delete('/api/admin/messages/:id', requireAdmin, async (req, res) => {
   } catch (e) {
     console.error('Suppression message:', e);
     res.status(500).json({ message: 'Impossible de supprimer le message.' });
+  }
+});
+
+// ======================================================
+// ADMIN — CONTACT & INFORMATIONS
+// ======================================================
+app.get('/api/admin/settings/contact', requireAdmin, async (_req, res) => {
+  try {
+    const { rows } = await query("SELECT setting_key,setting_value FROM site_settings WHERE setting_key IN ('restaurant','opening_hours','contact')");
+    const settings = { restaurant: {}, opening_hours: {}, contact: {} };
+    for (const row of rows) settings[row.setting_key] = parseSettingValue(row.setting_value, {});
+    res.json({
+      restaurant: settings.restaurant,
+      openingHours: settings.opening_hours,
+      contact: settings.contact
+    });
+  } catch (e) {
+    console.error('Paramètres contact admin:', e);
+    res.status(500).json({ message: 'Impossible de charger les informations de contact.' });
+  }
+});
+
+app.patch('/api/admin/settings/contact', requireAdmin, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const currentRows = await query("SELECT setting_key,setting_value FROM site_settings WHERE setting_key IN ('restaurant','opening_hours','contact')");
+    const current = { restaurant: {}, opening_hours: {}, contact: {} };
+    for (const row of currentRows.rows) current[row.setting_key] = parseSettingValue(row.setting_value, {});
+
+    const email = cleanText(body.email ?? current.contact.email ?? current.restaurant.email, 180).toLowerCase();
+    if (!validEmail(email)) return res.status(400).json({ message: 'Adresse email de contact invalide.' });
+
+    const phoneDisplay = cleanText(body.phoneDisplay ?? current.contact.phoneDisplay ?? current.restaurant.phone, 40);
+    const phoneHref = cleanText(body.phoneHref ?? current.contact.phoneHref ?? '', 40).replace(/[^+\d]/g, '');
+    if (!phoneDisplay || !phoneHref) return res.status(400).json({ message: 'Le téléphone de contact est obligatoire.' });
+
+    const contact = {
+      address: cleanText(body.address ?? current.contact.address ?? 'Draâ El Mizan, Tizi-Ouzou, Algérie', 260),
+      phoneDisplay,
+      phoneHref,
+      email,
+      mapEmbed: safeHttpUrl(body.mapEmbed ?? current.contact.mapEmbed ?? ''),
+      mapUrl: safeHttpUrl(body.mapUrl ?? current.contact.mapUrl ?? ''),
+      directionsUrl: safeHttpUrl(body.directionsUrl ?? current.contact.directionsUrl ?? ''),
+      facebook: safeHttpUrl(body.facebook ?? current.contact.facebook ?? ''),
+      instagram: safeHttpUrl(body.instagram ?? current.contact.instagram ?? ''),
+      tiktok: safeHttpUrl(body.tiktok ?? current.contact.tiktok ?? ''),
+      showAddress: asBool(body.showAddress, current.contact.showAddress ?? true),
+      showPhone: asBool(body.showPhone, current.contact.showPhone ?? true),
+      showEmail: asBool(body.showEmail, current.contact.showEmail ?? true),
+      showHours: asBool(body.showHours, current.contact.showHours ?? true),
+      showSocial: asBool(body.showSocial, current.contact.showSocial ?? true)
+    };
+
+    const openingHours = {
+      friday: cleanText(body.fridayHours ?? current.opening_hours.friday ?? '14:00-01:00', 80),
+      saturday_thursday: cleanText(body.weekHours ?? current.opening_hours.saturday_thursday ?? '08:00-23:00', 80)
+    };
+
+    const restaurant = {
+      ...current.restaurant,
+      phone: phoneDisplay.replace(/\s+/g, ''),
+      email,
+      city: cleanText(body.city ?? current.restaurant.city ?? 'Draâ El Mizan', 100),
+      wilaya: cleanText(body.wilaya ?? current.restaurant.wilaya ?? 'Tizi-Ouzou', 100),
+      country: cleanText(body.country ?? current.restaurant.country ?? 'Algérie', 100)
+    };
+
+    await query(`INSERT INTO site_settings(setting_key,setting_value) VALUES('contact',?)
+      ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value),updated_at=NOW()`, [JSON.stringify(contact)]);
+    await query(`INSERT INTO site_settings(setting_key,setting_value) VALUES('opening_hours',?)
+      ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value),updated_at=NOW()`, [JSON.stringify(openingHours)]);
+    await query(`INSERT INTO site_settings(setting_key,setting_value) VALUES('restaurant',?)
+      ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value),updated_at=NOW()`, [JSON.stringify(restaurant)]);
+
+    await audit(req, 'contact.settings.update', 'site_settings', 'contact');
+    res.json({ ok: true, restaurant, openingHours, contact });
+  } catch (e) {
+    console.error('Mise à jour contact admin:', e);
+    res.status(500).json({ message: 'Impossible de mettre à jour les informations de contact.' });
   }
 });
 
@@ -1354,6 +1511,40 @@ async function bootstrap(){
       KEY idx_order_verifications_expires (expires_at)
     )`);
     await query('DELETE FROM order_verifications WHERE expires_at < NOW()');
+
+    await query(`CREATE TABLE IF NOT EXISTS contact_replies (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      contact_message_id BIGINT UNSIGNED NOT NULL,
+      admin_id BIGINT UNSIGNED NULL,
+      recipient_email VARCHAR(180) NOT NULL,
+      subject VARCHAR(180) NOT NULL,
+      reply_text TEXT NOT NULL,
+      sent_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      KEY idx_contact_replies_message (contact_message_id,sent_at),
+      KEY idx_contact_replies_admin (admin_id)
+    )`);
+
+    const defaultContact = {
+      address: 'Draâ El Mizan, Tizi-Ouzou, Algérie',
+      phoneDisplay: '0668 92 94 53',
+      phoneHref: '+213668929453',
+      email: String(process.env.RESTAURANT_EMAIL || 'sammollo.contact.draa@gmail.com').trim().toLowerCase(),
+      mapEmbed: 'https://www.google.com/maps?q=36.5375127,3.8336894&z=15&output=embed',
+      mapUrl: 'https://www.google.com/maps/search/?api=1&query=36.5375127,3.8336894',
+      directionsUrl: 'https://www.google.com/maps/dir/?api=1&destination=36.5375127,3.8336894',
+      facebook: 'https://www.facebook.com/sam.mollo.58',
+      instagram: 'https://www.instagram.com/sammollodraael/',
+      tiktok: '',
+      showAddress: true,
+      showPhone: true,
+      showEmail: true,
+      showHours: true,
+      showSocial: true
+    };
+    await query(`INSERT INTO site_settings(setting_key,setting_value) VALUES('contact',?)
+      ON DUPLICATE KEY UPDATE setting_value=setting_value`, [JSON.stringify(defaultContact)]);
+
     if (process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD) {
       const initialEmail = String(process.env.ADMIN_EMAIL).trim().toLowerCase();
       const existingAdmins = await query('SELECT id FROM admins LIMIT 1');

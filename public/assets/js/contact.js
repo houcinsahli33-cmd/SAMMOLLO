@@ -15,6 +15,108 @@
   let timerId = null;
   let remaining = 180;
 
+  function contactRow(label) {
+    return [...document.querySelectorAll('.contact-detail-row')].find(row =>
+      row.querySelector('strong')?.textContent.trim().toLowerCase() === label.toLowerCase()
+    );
+  }
+
+  function displayHours(value) {
+    return String(value || '').replace(/\s*-\s*/g, ' – ');
+  }
+
+  function setSocialLink(label, url, visible) {
+    document.querySelectorAll(`a[aria-label="${label}"]`).forEach(link => {
+      link.hidden = !visible || !url;
+      if (url) {
+        link.href = url;
+        link.classList.remove('social-disabled');
+        link.target = '_blank';
+        link.rel = 'noopener';
+      }
+    });
+  }
+
+  async function loadPublicContactSettings() {
+    try {
+      const response = await fetch('/api/settings/public', { headers: { Accept: 'application/json' } });
+      if (!response.ok) return;
+      const data = await response.json();
+      const restaurant = data.restaurant || {};
+      const hours = data.opening_hours || {};
+      const contact = data.contact || {};
+
+      const address = contact.address || [restaurant.city, restaurant.wilaya, restaurant.country].filter(Boolean).join(', ') || 'Draâ El Mizan, Tizi-Ouzou, Algérie';
+      const phoneDisplay = contact.phoneDisplay || restaurant.phone || '0668 92 94 53';
+      const phoneHref = contact.phoneHref || String(phoneDisplay).replace(/[^+\d]/g, '');
+      const email = contact.email || restaurant.email || '';
+
+      const addressRow = contactRow('Adresse');
+      if (addressRow) {
+        addressRow.hidden = contact.showAddress === false;
+        const p = addressRow.querySelector('p');
+        if (p) p.textContent = address;
+      }
+
+      const phoneRow = contactRow('Téléphone');
+      if (phoneRow) {
+        phoneRow.hidden = contact.showPhone === false;
+        const a = phoneRow.querySelector('a');
+        if (a) { a.textContent = phoneDisplay; a.href = `tel:${phoneHref}`; }
+      }
+
+      const emailRow = contactRow('Email');
+      if (emailRow) {
+        emailRow.hidden = contact.showEmail === false;
+        const a = emailRow.querySelector('a');
+        if (a && email) { a.textContent = email; a.href = `mailto:${email}`; }
+      }
+
+      const hoursRow = contactRow('Horaires de travail');
+      if (hoursRow) {
+        hoursRow.hidden = contact.showHours === false;
+        const p = hoursRow.querySelector('p');
+        if (p) {
+          p.textContent = '';
+          p.append(document.createTextNode(`Vendredi : ${displayHours(hours.friday || '14:00-01:00')}`));
+          p.append(document.createElement('br'));
+          p.append(document.createTextNode(`Samedi à jeudi : ${displayHours(hours.saturday_thursday || '08:00-23:00')}`));
+        }
+      }
+
+      document.querySelectorAll('a[href^="tel:"]').forEach(a => {
+        if (phoneHref) a.href = `tel:${phoneHref}`;
+        if (a.closest('.contact-detail-row') || a.closest('.footer-contact')) a.textContent = phoneDisplay;
+      });
+      document.querySelectorAll('a[href^="mailto:"]').forEach(a => {
+        if (!email) return;
+        a.href = `mailto:${email}`;
+        if (a.closest('.contact-detail-row') || a.closest('.footer-contact')) a.textContent = email;
+      });
+
+      const mapFrame = document.querySelector('.contact-map iframe');
+      if (mapFrame && contact.mapEmbed) mapFrame.src = contact.mapEmbed;
+      const mapAddress = document.querySelector('.map-business p');
+      if (mapAddress) mapAddress.textContent = address;
+      const footerContact = document.querySelector('.footer-contact');
+      if (footerContact) {
+        const spans = footerContact.querySelectorAll('span');
+        if (spans.length > 1) spans[spans.length - 1].textContent = address.replace(/,\s*/g, ' · ');
+      }
+      const mapButtons = document.querySelectorAll('.map-buttons a');
+      if (mapButtons[0] && contact.mapUrl) mapButtons[0].href = contact.mapUrl;
+      if (mapButtons[1] && contact.directionsUrl) mapButtons[1].href = contact.directionsUrl;
+
+      const socialBlock = document.querySelector('.contact-social');
+      if (socialBlock) socialBlock.hidden = contact.showSocial === false;
+      setSocialLink('Facebook', contact.facebook, contact.showSocial !== false);
+      setSocialLink('Instagram', contact.instagram, contact.showSocial !== false);
+      setSocialLink('TikTok', contact.tiktok, contact.showSocial !== false);
+    } catch (error) {
+      console.warn('Paramètres publics de contact indisponibles:', error.message);
+    }
+  }
+
   function show(el) {
     el.hidden = false;
     document.body.style.overflow = 'hidden';
@@ -214,4 +316,6 @@
       hide(successBackdrop);
     }
   });
+
+  loadPublicContactSettings();
 })();
